@@ -16,7 +16,9 @@ class ForeignInvestorProvider with ChangeNotifier {
   List<ForeignInvestorData> _topSellStocks = [];
   
   String _selectedMarket = 'ALL'; // ALL, KOSPI, KOSDAQ
-  String _selectedDateRange = '7D'; // 1D, 7D, 30D, 3M
+  String _selectedDateRange = '1D'; // 1D, 7D, 30D, 3M
+  DateTime? _customFromDate;
+  DateTime? _customToDate;
   
   // Getters
   bool get isLoading => _isLoading;
@@ -27,6 +29,8 @@ class ForeignInvestorProvider with ChangeNotifier {
   List<ForeignInvestorData> get topSellStocks => _topSellStocks;
   String get selectedMarket => _selectedMarket;
   String get selectedDateRange => _selectedDateRange;
+  DateTime? get customFromDate => _customFromDate;
+  DateTime? get customToDate => _customToDate;
   
   // 최근 총 외국인 순매수 금액 (KOSPI + KOSDAQ)
   int get totalForeignNetAmount {
@@ -96,7 +100,8 @@ class ForeignInvestorProvider with ChangeNotifier {
   // 일별 요약 데이터 로드
   Future<void> loadDailySummary() async {
     try {
-      final days = _getDaysFromRange(_selectedDateRange);
+      // 기본적으로 60일치 데이터를 로드 (2개월 차트용)
+      final days = 60;
       final startDate = ForeignInvestorService.getDaysAgoString(days);
       
       String? marketFilter;
@@ -172,9 +177,20 @@ class ForeignInvestorProvider with ChangeNotifier {
   void setDateRange(String range) {
     if (_selectedDateRange != range) {
       _selectedDateRange = range;
+      _customFromDate = null;
+      _customToDate = null;
       notifyListeners();
       _refreshAllData();
     }
+  }
+
+  // 커스텀 날짜 범위 설정
+  void setCustomDateRange(DateTime fromDate, DateTime toDate) {
+    _customFromDate = fromDate;
+    _customToDate = toDate;
+    _selectedDateRange = 'CUSTOM';
+    notifyListeners();
+    _refreshAllData();
   }
   
   // 수동 새로고침
@@ -255,7 +271,45 @@ class ForeignInvestorProvider with ChangeNotifier {
   List<DailyForeignSummary> getKosdaqSummary() {
     return _dailySummary.where((s) => s.marketType == 'KOSDAQ').toList();
   }
+
+  // 차트용 1주일치 데이터 (기간 선택과 무관)
+  List<DailyForeignSummary> getWeeklySummaryForChart() {
+    // 별도로 1주일치 데이터를 가져와야 함
+    return _get7DaysSummary();
+  }
+
+  // 1주일치 요약 데이터 (내부 메서드)
+  List<DailyForeignSummary> _get7DaysSummary() {
+    // dailySummary에서 최근 7일치 데이터만 추출
+    final allData = List<DailyForeignSummary>.from(_dailySummary);
+    allData.sort((a, b) => b.date.compareTo(a.date)); // 최신순 정렬
+    return allData.take(7).toList();
+  }
   
+  // 현재 날짜 범위 정보 가져오기
+  Map<String, String> getCurrentDateRange() {
+    if (_customFromDate != null && _customToDate != null) {
+      return {
+        'fromDate': _formatDateForRange(_customFromDate!),
+        'toDate': _formatDateForRange(_customToDate!),
+      };
+    }
+    
+    final today = DateTime.now();
+    final days = _getDaysFromRange(_selectedDateRange);
+    final fromDate = today.subtract(Duration(days: days - 1));
+    
+    return {
+      'fromDate': _formatDateForRange(fromDate),
+      'toDate': _formatDateForRange(today),
+    };
+  }
+  
+  // 날짜를 표시용 문자열로 포맷
+  String _formatDateForRange(DateTime date) {
+    return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+  }
+
   // 최근 n일 순매수 추이 데이터
   List<Map<String, dynamic>> getNetAmountTrend(int days) {
     final filteredSummary = _dailySummary.take(days).toList();

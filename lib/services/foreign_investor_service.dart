@@ -61,8 +61,9 @@ class ForeignInvestorService {
       // 실제 구현 전에 더미 데이터로 UI 테스트
       final result = <DailyForeignSummary>[];
       
-      // 최근 7일간의 더미 데이터 생성
-      for (int i = 0; i < 7; i++) {
+      // 요청된 일수만큼 더미 데이터 생성 (최대 60일)
+      final daysToGenerate = limit > 60 ? 60 : limit;
+      for (int i = 0; i < daysToGenerate; i++) {
         final date = DateTime.now().subtract(Duration(days: i));
         final dateString = DateFormat('yyyyMMdd').format(date);
         
