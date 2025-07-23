@@ -421,16 +421,60 @@ class ForeignInvestorProvider with ChangeNotifier {
 
   // 차트용 1주일치 데이터 (기간 선택과 무관)
   List<DailyForeignSummary> getWeeklySummaryForChart() {
-    // 별도로 1주일치 데이터를 가져와야 함
+    // chartDailySummary에서 최근 7일치 데이터 추출 (전체 시장)
     return _get7DaysSummary();
   }
 
   // 1주일치 요약 데이터 (내부 메서드)
   List<DailyForeignSummary> _get7DaysSummary() {
-    // dailySummary에서 최근 7일치 데이터만 추출
-    final allData = List<DailyForeignSummary>.from(_dailySummary);
-    allData.sort((a, b) => b.date.compareTo(a.date)); // 최신순 정렬
-    return allData.take(7).toList();
+    // chartDailySummary를 사용하여 전체 시장 기준 최근 7일 데이터
+    if (_chartDailySummary.isEmpty) return [];
+    
+    // 날짜별로 그룹화하여 KOSPI + KOSDAQ 합계 데이터 생성
+    final Map<String, List<DailyForeignSummary>> groupedByDate = {};
+    
+    for (final summary in _chartDailySummary) {
+      final date = summary.date;
+      if (!groupedByDate.containsKey(date)) {
+        groupedByDate[date] = [];
+      }
+      groupedByDate[date]!.add(summary);
+    }
+    
+    // 날짜별로 KOSPI + KOSDAQ 합계를 계산하여 1개의 DailyForeignSummary 생성
+    final weeklyData = <DailyForeignSummary>[];
+    
+    for (final entry in groupedByDate.entries) {
+      final date = entry.key;
+      final summaries = entry.value;
+      
+      int totalNetAmount = 0;
+      int totalBuyAmount = 0;
+      int totalSellAmount = 0;
+      int totalTradeAmount = 0;
+      
+      for (final summary in summaries) {
+        totalNetAmount += summary.totalForeignNetAmount;
+        totalBuyAmount += summary.foreignBuyAmount;
+        totalSellAmount += summary.foreignSellAmount;
+        totalTradeAmount += summary.foreignTotalTradeAmount;
+      }
+      
+      // 합계 데이터로 새로운 DailyForeignSummary 생성
+      weeklyData.add(DailyForeignSummary(
+        date: date,
+        marketType: 'ALL', // 전체 시장
+        foreignNetAmount: totalNetAmount, // 외국인 순매수 (일반적으로 totalForeignNetAmount와 동일)
+        otherForeignNetAmount: 0, // 기타외국인은 0으로 설정
+        totalForeignNetAmount: totalNetAmount,
+        foreignBuyAmount: totalBuyAmount,
+        foreignSellAmount: totalSellAmount,
+      ));
+    }
+    
+    // 최신순 정렬하여 최근 7일 반환
+    weeklyData.sort((a, b) => b.date.compareTo(a.date));
+    return weeklyData.take(7).toList();
   }
   
   // 현재 날짜 범위 정보 가져오기

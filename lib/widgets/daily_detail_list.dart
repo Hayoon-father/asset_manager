@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../models/foreign_investor_data.dart';
-import '../providers/foreign_investor_provider.dart';
 
 class DailyDetailList extends StatelessWidget {
   final List<DailyForeignSummary> dailyData;
@@ -138,14 +137,27 @@ class DailyDetailList extends StatelessWidget {
           // 데이터 리스트 (스크롤 가능)
           SizedBox(
             height: 280, // 고정 높이
-            child: ListView.builder(
-              padding: EdgeInsets.zero,
-              itemCount: dailyData.length,
-              itemBuilder: (context, index) {
-                final data = dailyData[index];
-                return _buildDataRow(data, index);
-              },
-            ),
+            child: dailyData.isEmpty 
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text(
+                        '표시할 데이터가 없습니다',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: dailyData.length,
+                    itemBuilder: (context, index) {
+                      final data = dailyData[index];
+                      return _buildDataRow(data, index);
+                    },
+                  ),
           ),
         ],
       ),
@@ -192,17 +204,21 @@ class DailyDetailList extends StatelessWidget {
               decoration: BoxDecoration(
                 color: data.marketType == 'KOSPI' 
                     ? Colors.blue.shade100 
-                    : Colors.orange.shade100,
+                    : data.marketType == 'KOSDAQ'
+                        ? Colors.orange.shade100
+                        : Colors.purple.shade100,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                data.marketType,
+                data.marketType == 'ALL' ? '전체' : data.marketType,
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   color: data.marketType == 'KOSPI' 
                       ? Colors.blue.shade700 
-                      : Colors.orange.shade700,
+                      : data.marketType == 'KOSDAQ'
+                          ? Colors.orange.shade700
+                          : Colors.purple.shade700,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -253,7 +269,6 @@ class DailyDetailList extends StatelessWidget {
   String _formatDate(String date) {
     try {
       if (date.length == 8) {
-        final year = date.substring(0, 4);
         final month = date.substring(4, 6);
         final day = date.substring(6, 8);
         return '$month/$day';
