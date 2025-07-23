@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          '외국인 수급현황',
+          '국내주식 수급 동향 모니터 현황',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 20,
@@ -65,9 +65,9 @@ class _HomeScreenState extends State<HomeScreen>
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: '요약', icon: Icon(Icons.dashboard)),
-            Tab(text: '종목', icon: Icon(Icons.trending_up)),
-            Tab(text: '차트', icon: Icon(Icons.show_chart)),
+            Tab(text: '외국인 수급', icon: Icon(Icons.dashboard)),
+            Tab(text: '기관 수급', icon: Icon(Icons.trending_up)),
+            Tab(text: '원달러 환율', icon: Icon(Icons.show_chart)),
           ],
         ),
       ),
@@ -151,6 +151,32 @@ class _HomeScreenState extends State<HomeScreen>
             const SizedBox(height: 16),
           ],
           
+          // 외국인 순매수 상위
+          TopStocksList(
+            title: '외국인 순매수 상위',
+            stocks: provider.topBuyStocks,
+            isPositive: true,
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // 외국인 순매도 상위
+          TopStocksList(
+            title: '외국인 순매도 상위',
+            stocks: provider.topSellStocks,
+            isPositive: false,
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // 일별 트렌드 차트
+          DailyTrendChart(
+            summaryData: provider.dailySummary,
+            selectedMarket: provider.selectedMarket,
+          ),
+          
+          const SizedBox(height: 16),
+          
           // 최근 데이터 리스트
           Card(
             child: Padding(
@@ -186,42 +212,31 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildStocksTab(ForeignInvestorProvider provider) {
-    return RefreshIndicator(
-      onRefresh: provider.refresh,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // 외국인 순매수 상위
-          TopStocksList(
-            title: '외국인 순매수 상위',
-            stocks: provider.topBuyStocks,
-            isPositive: true,
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Text(
+          '기관 수급 데이터를 준비 중입니다...',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey,
           ),
-          
-          const SizedBox(height: 16),
-          
-          // 외국인 순매도 상위
-          TopStocksList(
-            title: '외국인 순매도 상위',
-            stocks: provider.topSellStocks,
-            isPositive: false,
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildChartTab(ForeignInvestorProvider provider) {
-    return RefreshIndicator(
-      onRefresh: provider.refresh,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          DailyTrendChart(
-            summaryData: provider.dailySummary,
-            selectedMarket: provider.selectedMarket,
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Text(
+          '원달러 환율 데이터를 준비 중입니다...',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey,
           ),
-        ],
+        ),
       ),
     );
   }

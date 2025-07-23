@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ForeignInvestorProvider()),
       ],
       child: MaterialApp(
-        title: '외국인 수급현황',
+        title: '국내주식 수급 동향 모니터 현황',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: Colors.blue,
