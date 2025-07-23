@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/foreign_investor_data.dart';
 
-class DailyTrendChart extends StatelessWidget {
+class DailyTrendChart extends StatefulWidget {
   final List<DailyForeignSummary> summaryData;
   final String selectedMarket;
 
@@ -12,8 +12,17 @@ class DailyTrendChart extends StatelessWidget {
   });
 
   @override
+  State<DailyTrendChart> createState() => _DailyTrendChartState();
+}
+
+class _DailyTrendChartState extends State<DailyTrendChart> {
+  double _scale = 1.0;
+  double _panX = 0.0;
+  double _lastPanX = 0.0;
+
+  @override
   Widget build(BuildContext context) {
-    if (summaryData.isEmpty) {
+    if (widget.summaryData.isEmpty) {
       return Card(
         child: Container(
           height: 300,
@@ -25,247 +34,322 @@ class DailyTrendChart extends StatelessWidget {
       );
     }
 
-    return Column(
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '외국인 주식보유 총액 추이',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // 범례
+            Row(
               children: [
-                Text(
-                  '외국인 순매수 추이',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
                 Container(
-                  height: 200,
-                  child: _buildSimpleChart(context),
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
                 ),
+                const Text(' 보유 총액  ', style: TextStyle(fontSize: 12)),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: Colors.orange,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const Text(' 증감 추세', style: TextStyle(fontSize: 12)),
               ],
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              '← 과거 날짜     |     최신 날짜 →',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey[600],
+                fontSize: 10,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 300,
+              child: _buildStockStyleChart(),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '일별 상세 데이터',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                ...summaryData.take(10).map((summary) => _buildDataRow(summary)),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSimpleChart(BuildContext context) {
-    // 간단한 막대 차트 구현
-    final maxAmount = summaryData
-        .map((s) => s.totalForeignNetAmount.abs())
-        .fold<int>(0, (max, amount) => amount > max ? amount : max);
-    
-    if (maxAmount == 0) {
-      return const Center(child: Text('데이터가 없습니다'));
-    }
-
-    return ListView.builder(
-      scrollDirection: Axis.horizontal,
-      itemCount: summaryData.length,
-      itemBuilder: (context, index) {
-        final data = summaryData[index];
-        final amount = data.totalForeignNetAmount;
-        final isPositive = amount > 0;
-        final heightRatio = amount.abs() / maxAmount;
-        
-        return Container(
-          width: 40,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              // 금액 표시 (작게)
-              if (amount != 0)
-                Text(
-                  _formatAmountShort(amount),
-                  style: const TextStyle(fontSize: 8),
-                  textAlign: TextAlign.center,
-                ),
-              const SizedBox(height: 4),
-              
-              // 막대 차트
-              Expanded(
-                child: Container(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    width: 24,
-                    height: 150 * heightRatio,
-                    decoration: BoxDecoration(
-                      color: isPositive ? Colors.red : Colors.blue,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(2),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              
-              const SizedBox(height: 4),
-              
-              // 날짜 표시
-              Text(
-                _formatDateShort(data.date),
-                style: const TextStyle(fontSize: 10),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDataRow(DailyForeignSummary summary) {
-    final isPositive = summary.totalForeignNetAmount > 0;
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          // 날짜
-          SizedBox(
-            width: 80,
-            child: Text(
-              _formatDateForDisplay(summary.date),
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
-          
-          // 시장
-          SizedBox(
-            width: 60,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: summary.marketType == 'KOSPI' 
-                    ? Colors.blue[100] 
-                    : Colors.orange[100],
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                summary.marketType,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: summary.marketType == 'KOSPI' 
-                      ? Colors.blue[800] 
-                      : Colors.orange[800],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 8),
-          
-          // 순매수 금액
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  _formatAmount(summary.totalForeignNetAmount),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: isPositive ? Colors.red : Colors.blue,
-                  ),
-                ),
-                Text(
-                  isPositive ? '순매수' : '순매도',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // 트렌드 아이콘
-          Icon(
-            isPositive ? Icons.trending_up : Icons.trending_down,
-            color: isPositive ? Colors.red : Colors.blue,
-            size: 16,
-          ),
-        ],
       ),
     );
   }
 
-  String _formatAmount(int amount) {
-    if (amount == 0) return '0원';
+  Widget _buildStockStyleChart() {
+    return GestureDetector(
+      onScaleStart: (details) {
+        _lastPanX = _panX;
+      },
+      onScaleUpdate: (details) {
+        setState(() {
+          _scale = (_scale * details.scale).clamp(0.5, 5.0);
+          
+          if (details.scale == 1.0) {
+            // 팬 제스처 (좌측으로 이동하면 과거 데이터 조회)
+            _panX = _lastPanX + details.focalPointDelta.dx;
+            
+            // 팬 범위 제한
+            final maxPan = (widget.summaryData.length * _scale - widget.summaryData.length) * 20;
+            _panX = _panX.clamp(-maxPan, 0);
+          }
+        });
+      },
+      child: ClipRect(
+        child: Stack(
+          children: [
+            // 차트 영역
+            CustomPaint(
+              size: const Size(double.infinity, 300),
+              painter: _StockStyleChartPainter(
+                data: widget.summaryData,
+                scale: _scale,
+                panX: _panX,
+              ),
+            ),
+            // Y축 라벨 (왼쪽)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 30,
+              width: 80,
+              child: _buildYAxisLabels(),
+            ),
+            // X축 라벨 (하단)
+            Positioned(
+              left: 80,
+              right: 0,
+              bottom: 0,
+              height: 30,
+              child: _buildXAxisLabels(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildYAxisLabels() {
+    final values = widget.summaryData.map((d) => d.cumulativeHoldings).toList();
+    if (values.isEmpty) return const SizedBox();
     
-    final absAmount = amount.abs();
-    final sign = amount < 0 ? '-' : '';
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
+    final minValue = values.reduce((a, b) => a < b ? a : b);
     
-    if (absAmount >= 100000000) { // 1억 이상
-      final eok = (absAmount / 100000000);
-      return '${sign}${eok.toStringAsFixed(eok == eok.truncate() ? 0 : 1)}억원';
-    } else if (absAmount >= 10000) { // 1만 이상
-      final man = (absAmount / 10000);
-      return '${sign}${man.toStringAsFixed(man == man.truncate() ? 0 : 1)}만원';
-    } else {
-      return '${sign}${absAmount}원';
+    final steps = 6;
+    final stepValue = (maxValue - minValue) / steps;
+    
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List.generate(steps + 1, (index) {
+        final value = maxValue - (stepValue * index);
+        final displayValue = (value / 1000000000000).toStringAsFixed(1); // 1조원 단위
+        return Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Text(
+            '${displayValue}조',
+            style: const TextStyle(fontSize: 10, color: Colors.grey),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildXAxisLabels() {
+    final visibleDataCount = (widget.summaryData.length / _scale).round().clamp(3, widget.summaryData.length);
+    final step = (widget.summaryData.length / visibleDataCount).round().clamp(1, widget.summaryData.length);
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(visibleDataCount, (index) {
+        final dataIndex = (index * step).clamp(0, widget.summaryData.length - 1);
+        final date = widget.summaryData[dataIndex].date;
+        final displayDate = '${date.substring(4, 6)}/${date.substring(6, 8)}';
+        
+        return Text(
+          displayDate,
+          style: const TextStyle(fontSize: 10, color: Colors.grey),
+        );
+      }),
+    );
+  }
+}
+
+class _StockStyleChartPainter extends CustomPainter {
+  final List<DailyForeignSummary> data;
+  final double scale;
+  final double panX;
+
+  _StockStyleChartPainter({
+    required this.data,
+    required this.scale,
+    required this.panX,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty || size.width <= 0 || size.height <= 0) return;
+
+    // 차트 영역 (Y축 라벨과 X축 라벨 공간 제외)
+    final chartArea = Rect.fromLTWH(80, 0, size.width - 80, size.height - 30);
+    
+    // 페인트 설정
+
+    final gridPaint = Paint()
+      ..color = Colors.grey.withOpacity(0.3)
+      ..strokeWidth = 0.5;
+
+    final zeroPaint = Paint()
+      ..color = Colors.grey.withOpacity(0.8)
+      ..strokeWidth = 1.0;
+
+    // 클리핑 적용
+    canvas.clipRect(chartArea);
+
+    // 누적 보유액 데이터로 최대/최소값 계산
+    final values = data.map((d) => d.cumulativeHoldings).toList();
+    if (values.isEmpty) return;
+    
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
+    final minValue = values.reduce((a, b) => a < b ? a : b);
+    final range = maxValue - minValue == 0 ? 1 : maxValue - minValue;
+
+    // 기준선 그리기 (최소값 기준)
+    final baselineY = chartArea.height;
+    
+    canvas.drawLine(
+      Offset(chartArea.left, baselineY),
+      Offset(chartArea.right, baselineY),
+      zeroPaint,
+    );
+
+    // 격자 그리기
+    for (int i = 1; i < 6; i++) {
+      final y = chartArea.height * i / 6;
+      canvas.drawLine(
+        Offset(chartArea.left, y),
+        Offset(chartArea.right, y),
+        gridPaint,
+      );
+    }
+
+    final scaledWidth = chartArea.width * scale;
+    final pointSpacing = data.length > 1 ? scaledWidth / (data.length - 1) : scaledWidth / 2;
+
+    // 포인트 계산 (날짜순 정렬 - 좌측이 과거, 우측이 최신)
+    final sortedData = List<DailyForeignSummary>.from(data);
+    sortedData.sort((a, b) => a.date.compareTo(b.date));
+
+    final points = <Offset>[];
+    final increasingPoints = <Offset>[];
+    final decreasingPoints = <Offset>[];
+
+    for (int i = 0; i < sortedData.length; i++) {
+      final x = chartArea.left + panX + (i * pointSpacing);
+      final value = sortedData[i].cumulativeHoldings;
+      final y = chartArea.height - ((value - minValue) / range) * chartArea.height;
+
+      final point = Offset(x, y.clamp(0.0, chartArea.height));
+      points.add(point);
+      
+      // 전일 대비 증감 판단
+      if (i > 0) {
+        final prevValue = sortedData[i - 1].cumulativeHoldings;
+        if (value > prevValue) {
+          increasingPoints.add(point);
+        } else if (value < prevValue) {
+          decreasingPoints.add(point);
+        }
+      } else {
+        // 첫 번째 포인트는 증가로 처리
+        increasingPoints.add(point);
+      }
+    }
+
+    // 보유총액 트렌드 라인 그리기 (굵은 녹색 라인)
+    if (points.length > 1) {
+      final path = Path();
+      path.moveTo(points[0].dx, points[0].dy);
+      
+      for (int i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx, points[i].dy);
+      }
+      
+      final linePaint = Paint()
+        ..color = Colors.green
+        ..strokeWidth = 3.0
+        ..style = PaintingStyle.stroke;
+      
+      canvas.drawPath(path, linePaint);
+    }
+
+    // 영역 채우기 (그라데이션)
+    if (points.length > 1) {
+      final path = Path();
+      path.moveTo(points[0].dx, baselineY);
+      path.lineTo(points[0].dx, points[0].dy);
+      
+      for (int i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx, points[i].dy);
+      }
+      
+      path.lineTo(points.last.dx, baselineY);
+      path.close();
+      
+      final fillPaint = Paint()
+        ..color = Colors.green.withOpacity(0.2)
+        ..style = PaintingStyle.fill;
+      
+      canvas.drawPath(path, fillPaint);
+    }
+
+    // 증가 포인트 그리기 (녹색 원)
+    final increasePointPaint = Paint()
+      ..color = Colors.green
+      ..style = PaintingStyle.fill;
+    
+    for (final point in increasingPoints) {
+      if (point.dx >= chartArea.left - 10 && point.dx <= chartArea.right + 10) {
+        canvas.drawCircle(point, 3.0, increasePointPaint);
+        // 테두리
+        canvas.drawCircle(point, 3.0, Paint()
+          ..color = Colors.white
+          ..strokeWidth = 1.0
+          ..style = PaintingStyle.stroke);
+      }
+    }
+
+    // 감소 포인트 그리기 (오렌지 원)
+    final decreasePointPaint = Paint()
+      ..color = Colors.orange
+      ..style = PaintingStyle.fill;
+    
+    for (final point in decreasingPoints) {
+      if (point.dx >= chartArea.left - 10 && point.dx <= chartArea.right + 10) {
+        canvas.drawCircle(point, 3.0, decreasePointPaint);
+        // 테두리
+        canvas.drawCircle(point, 3.0, Paint()
+          ..color = Colors.white
+          ..strokeWidth = 1.0
+          ..style = PaintingStyle.stroke);
+      }
     }
   }
 
-  String _formatAmountShort(int amount) {
-    if (amount == 0) return '0';
-    
-    final absAmount = amount.abs();
-    final sign = amount < 0 ? '-' : '';
-    
-    if (absAmount >= 100000000) { // 1억 이상
-      final eok = (absAmount / 100000000);
-      return '${sign}${eok.toStringAsFixed(0)}억';
-    } else if (absAmount >= 10000) { // 1만 이상
-      final man = (absAmount / 10000);
-      return '${sign}${man.toStringAsFixed(0)}만';
-    } else {
-      return '${sign}${(absAmount / 1000).toStringAsFixed(0)}천';
-    }
-  }
-
-  String _formatDateForDisplay(String date) {
-    try {
-      final year = date.substring(0, 4);
-      final month = date.substring(4, 6);
-      final day = date.substring(6, 8);
-      return '$month/$day';
-    } catch (e) {
-      return date;
-    }
-  }
-
-  String _formatDateShort(String date) {
-    try {
-      final month = date.substring(4, 6);
-      final day = date.substring(6, 8);
-      return '$month/$day';
-    } catch (e) {
-      return date;
-    }
-  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

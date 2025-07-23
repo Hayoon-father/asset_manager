@@ -22,9 +22,9 @@ class ForeignInvestorDataCollector:
         # 환경 변수 로드
         load_dotenv()
         
-        # Supabase 설정 (earthquake 프로젝트와 동일한 설정 사용)
-        self.supabase_url = "https://myvuxuwczrlhwnnceile.supabase.co"
-        self.supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15dnV4dXdjenJsaHdubmNlaWxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4MjE3MTcsImV4cCI6MjA2ODM5NzcxN30.-DZ4pyYwRmG3dRwR3jkXIc37ARo2mPui36Ji9PmJ690"
+        # Supabase 설정 (asset_manager 프로젝트)
+        self.supabase_url = "https://ggkhmksvypmlxhttqthb.supabase.co"
+        self.supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdna2hta3N2eXBtbHhodHRxdGhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMyNDQ1MTUsImV4cCI6MjA2ODgyMDUxNX0.pCQE4Hr7NNpX2zjAmLYq--j9CDyodK1PlDZX3kJRFJ8"
         
         # Supabase 클라이언트 생성
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
@@ -197,7 +197,7 @@ class ForeignInvestorDataCollector:
     
     def collect_historical_data(self, start_date: str, end_date: str = None):
         """
-        기간별 히스토리 데이터 수집
+        기간별 히스토리 데이터 수집 (일별로 상세 수집)
         
         Args:
             start_date: 시작일 (YYYYMMDD)
@@ -213,31 +213,121 @@ class ForeignInvestorDataCollector:
         start_dt = datetime.strptime(start_date, "%Y%m%d")
         end_dt = datetime.strptime(end_date, "%Y%m%d")
         
-        # 일주일 단위로 데이터 수집 (API 부하 방지)
+        # 일별로 데이터 수집 (더 정확한 데이터를 위해)
         current_date = start_dt
+        total_days = (end_dt - start_dt).days + 1
+        processed_days = 0
+        
         while current_date <= end_dt:
-            week_end = min(current_date + timedelta(days=6), end_dt)
-            
             current_str = current_date.strftime("%Y%m%d")
-            week_end_str = week_end.strftime("%Y%m%d")
+            processed_days += 1
             
-            logger.info(f"주간 데이터 수집: {current_str} ~ {week_end_str}")
+            # 주말은 건너뛰기 (한국 증시는 주말 휴장)
+            if current_date.weekday() >= 5:  # 5=토요일, 6=일요일
+                current_date += timedelta(days=1)
+                continue
             
-            # 주간 데이터 수집
-            kospi_data = self.get_foreign_investor_data(current_str, week_end_str, "KOSPI")
-            if not kospi_data.empty:
-                # 주간 데이터는 마지막 날짜를 기준으로 저장
-                kospi_data['date'] = week_end_str
-                self.save_to_supabase(kospi_data)
+            logger.info(f"일별 데이터 수집 진행률: {processed_days}/{total_days} - {current_str}")
             
-            kosdaq_data = self.get_foreign_investor_data(current_str, week_end_str, "KOSDAQ")
-            if not kosdaq_data.empty:
-                kosdaq_data['date'] = week_end_str
-                self.save_to_supabase(kosdaq_data)
+            try:
+                # KOSPI 전체 시장 데이터
+                kospi_data = self.get_foreign_investor_data(current_str, current_str, "KOSPI")
+                if not kospi_data.empty:
+                    self.save_to_supabase(kospi_data)
+                
+                # KOSDAQ 전체 시장 데이터
+                kosdaq_data = self.get_foreign_investor_data(current_str, current_str, "KOSDAQ")
+                if not kosdaq_data.empty:
+                    self.save_to_supabase(kosdaq_data)
+                
+                # KOSPI 상위 종목 데이터 (주간 단위로만 수집하여 API 부하 줄이기)
+                if current_date.weekday() == 4:  # 금요일에만 상위 종목 수집
+                    week_start = current_date - timedelta(days=4)
+                    week_start_str = week_start.strftime("%Y%m%d")
+                    
+                    kospi_top = self.get_foreign_top_stocks(week_start_str, current_str, "KOSPI", 20)
+                    if not kospi_top.empty:
+                        self.save_to_supabase(kospi_top)
+                    
+                    kosdaq_top = self.get_foreign_top_stocks(week_start_str, current_str, "KOSDAQ", 20)
+                    if not kosdaq_top.empty:
+                        self.save_to_supabase(kosdaq_top)
+                
+                # API 부하 방지를 위한 딜레이
+                import time
+                time.sleep(0.5)  # 0.5초 대기
+                
+            except Exception as e:
+                logger.error(f"날짜 {current_str} 데이터 수집 중 오류: {e}")
+                # 오류가 발생해도 계속 진행
+                pass
             
-            current_date = week_end + timedelta(days=1)
+            current_date += timedelta(days=1)
         
         logger.info(f"히스토리 데이터 수집 완료: {start_date} ~ {end_date}")
+    
+    def collect_bulk_historical_data(self, start_date: str = "20200101", end_date: str = None):
+        """
+        대량 히스토리 데이터 수집 (2020년부터)
+        
+        Args:
+            start_date: 시작일 (기본값: 20200101)
+            end_date: 종료일 (None이면 어제 날짜)
+        """
+        logger.info("=== 대량 히스토리 데이터 수집 시작 ===")
+        logger.info("2020년 1월 1일부터 현재까지의 외국인 수급 데이터를 수집합니다.")
+        logger.info("이 작업은 오랜 시간이 소요될 수 있습니다.")
+        
+        # 연도별로 나누어서 수집 (메모리 효율성)
+        start_year = int(start_date[:4])
+        current_year = datetime.now().year
+        
+        for year in range(start_year, current_year + 1):
+            year_start = f"{year}0101"
+            year_end = f"{year}1231"
+            
+            # 마지막 연도인 경우 어제까지만
+            if year == current_year:
+                if end_date is None:
+                    yesterday = datetime.now() - timedelta(days=1)
+                    year_end = yesterday.strftime("%Y%m%d")
+                else:
+                    year_end = end_date
+            
+            logger.info(f"=== {year}년 데이터 수집 시작 ===")
+            self.collect_historical_data(year_start, year_end)
+            logger.info(f"=== {year}년 데이터 수집 완료 ===")
+        
+        logger.info("=== 대량 히스토리 데이터 수집 완료 ===")
+    
+    def verify_data_completeness(self, start_date: str, end_date: str):
+        """
+        데이터 완성도 검증
+        
+        Args:
+            start_date: 검증 시작일
+            end_date: 검증 종료일
+        """
+        try:
+            # Supabase에서 데이터 조회
+            result = self.supabase.table("foreign_investor_data")\
+                .select("date, market_type, investor_type")\
+                .gte("date", start_date)\
+                .lte("date", end_date)\
+                .execute()
+            
+            data_count = len(result.data)
+            logger.info(f"저장된 데이터 개수: {data_count}개")
+            
+            # 날짜별 통계
+            dates = set(item['date'] for item in result.data)
+            logger.info(f"수집된 날짜 수: {len(dates)}개")
+            
+            return data_count
+            
+        except Exception as e:
+            logger.error(f"데이터 검증 중 오류: {e}")
+            return 0
 
 
 def main():
@@ -262,8 +352,31 @@ def main():
             end_date = sys.argv[3] if len(sys.argv) > 3 else None
             collector.collect_historical_data(start_date, end_date)
             
+        elif command == "bulk":
+            # 2020년부터 대량 히스토리 데이터 수집
+            logger.info("2020년 1월 1일부터 현재까지의 모든 외국인 수급 데이터를 수집합니다.")
+            # 자동으로 진행 (스크립트에서 호출되므로 사용자 확인 생략)
+            start_date = sys.argv[2] if len(sys.argv) > 2 else "20200101"
+            end_date = sys.argv[3] if len(sys.argv) > 3 else None
+            logger.info(f"자동 실행 모드: {start_date} ~ {end_date or '현재'}")
+            collector.collect_bulk_historical_data(start_date, end_date)
+                
+        elif command == "verify":
+            # 데이터 완성도 검증
+            if len(sys.argv) < 4:
+                logger.error("시작일과 종료일을 지정해주세요. 예: python foreign_investor_collector.py verify 20200101 20201231")
+                return
+            
+            start_date = sys.argv[2]
+            end_date = sys.argv[3]
+            collector.verify_data_completeness(start_date, end_date)
+            
         else:
-            logger.error("올바른 명령어를 사용해주세요: daily 또는 historical")
+            logger.error("올바른 명령어를 사용해주세요:")
+            logger.error("  daily [날짜]          - 일별 데이터 수집")
+            logger.error("  historical 시작일 [종료일] - 기간별 데이터 수집")
+            logger.error("  bulk [시작일] [종료일]    - 2020년부터 대량 데이터 수집")
+            logger.error("  verify 시작일 종료일     - 데이터 완성도 검증")
     else:
         # 기본값: 어제 데이터 수집
         logger.info("기본 모드: 어제 데이터 수집")

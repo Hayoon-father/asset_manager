@@ -32,7 +32,7 @@ class FilterChips extends StatelessWidget {
                         label: '전체',
                         value: 'ALL',
                         selected: provider.selectedMarket == 'ALL',
-                        onSelected: (selected) {
+                        onSelected: provider.isLoading ? null : (selected) {
                           if (selected) provider.setMarketFilter('ALL');
                         },
                       ),
@@ -41,7 +41,7 @@ class FilterChips extends StatelessWidget {
                         label: 'KOSPI',
                         value: 'KOSPI',
                         selected: provider.selectedMarket == 'KOSPI',
-                        onSelected: (selected) {
+                        onSelected: provider.isLoading ? null : (selected) {
                           if (selected) provider.setMarketFilter('KOSPI');
                         },
                       ),
@@ -50,7 +50,7 @@ class FilterChips extends StatelessWidget {
                         label: 'KOSDAQ',
                         value: 'KOSDAQ',
                         selected: provider.selectedMarket == 'KOSDAQ',
-                        onSelected: (selected) {
+                        onSelected: provider.isLoading ? null : (selected) {
                           if (selected) provider.setMarketFilter('KOSDAQ');
                         },
                       ),
@@ -82,7 +82,7 @@ class FilterChips extends StatelessWidget {
                         label: '1일',
                         value: '1D',
                         selected: provider.selectedDateRange == '1D',
-                        onSelected: (selected) {
+                        onSelected: provider.isLoading ? null : (selected) {
                           if (selected) provider.setDateRange('1D');
                         },
                       ),
@@ -91,7 +91,7 @@ class FilterChips extends StatelessWidget {
                         label: '7일',
                         value: '7D',
                         selected: provider.selectedDateRange == '7D',
-                        onSelected: (selected) {
+                        onSelected: provider.isLoading ? null : (selected) {
                           if (selected) provider.setDateRange('7D');
                         },
                       ),
@@ -100,7 +100,7 @@ class FilterChips extends StatelessWidget {
                         label: '30일',
                         value: '30D',
                         selected: provider.selectedDateRange == '30D',
-                        onSelected: (selected) {
+                        onSelected: provider.isLoading ? null : (selected) {
                           if (selected) provider.setDateRange('30D');
                         },
                       ),
@@ -109,7 +109,7 @@ class FilterChips extends StatelessWidget {
                         label: '3개월',
                         value: '3M',
                         selected: provider.selectedDateRange == '3M',
-                        onSelected: (selected) {
+                        onSelected: provider.isLoading ? null : (selected) {
                           if (selected) provider.setDateRange('3M');
                         },
                       ),
@@ -129,24 +129,34 @@ class FilterChips extends StatelessWidget {
     required String label,
     required String value,
     required bool selected,
-    required ValueChanged<bool> onSelected,
+    required ValueChanged<bool>? onSelected,
   }) {
+    final isDisabled = onSelected == null;
+    
     return ChoiceChip(
       label: Text(
         label,
         style: TextStyle(
           fontSize: 12,
-          color: selected 
-              ? Theme.of(context).colorScheme.onPrimary
-              : Theme.of(context).colorScheme.onSurface,
+          color: isDisabled 
+              ? Colors.grey.shade400
+              : selected 
+                  ? Theme.of(context).colorScheme.onPrimary
+                  : Theme.of(context).colorScheme.onSurface,
         ),
       ),
       selected: selected,
       onSelected: onSelected,
-      selectedColor: Theme.of(context).colorScheme.primary,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      selectedColor: isDisabled 
+          ? Colors.grey.shade300 
+          : Theme.of(context).colorScheme.primary,
+      backgroundColor: isDisabled 
+          ? Colors.grey.shade100 
+          : Theme.of(context).colorScheme.surface,
       side: BorderSide(
-        color: selected
+        color: isDisabled 
+            ? Colors.grey.shade300
+            : selected
             ? Theme.of(context).colorScheme.primary
             : Theme.of(context).colorScheme.outline,
         width: 1,

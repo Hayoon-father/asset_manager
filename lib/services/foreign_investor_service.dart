@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as Math;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/foreign_investor_data.dart';
@@ -15,42 +16,51 @@ class ForeignInvestorService {
   
   Stream<List<ForeignInvestorData>> get dataStream => _dataStreamController.stream;
 
-  // 최근 외국인 수급 데이터 조회 (간단한 버전)
+  // 최근 외국인 수급 데이터 조회 (실제 DB 연결)
   Future<List<ForeignInvestorData>> getLatestForeignInvestorData({
     String? marketType,
     int limit = 50,
   }) async {
     try {
-      // 기본 쿼리
-      var query = _client
+      print('🔍 실제 DB에서 최신 외국인 수급 데이터 조회 시작');
+      
+      // 전체 데이터 조회
+      final response = await _client
           .from(tableName)
-          .select()
+          .select('*')
           .order('date', ascending: false)
           .order('created_at', ascending: false)
-          .limit(limit);
-
-      final List<Map<String, dynamic>> response = await query;
+          .limit(limit * 3); // 필터링을 위해 더 많이 조회
+      print('📊 DB 조회 결과: ${response.length}개 레코드');
       
-      // 시장 타입 필터링 (클라이언트에서 처리)
-      List<Map<String, dynamic>> filteredResponse = response;
-      if (marketType != null) {
-        filteredResponse = response
-            .where((item) => item['market_type'] == marketType)
-            .toList();
+      if (response.isEmpty) {
+        print('⚠️ 조회된 데이터가 없습니다.');
+        return [];
       }
       
-      return filteredResponse
+      // JSON을 객체로 변환
+      var allData = response
           .map<ForeignInvestorData>((json) => ForeignInvestorData.fromJson(json))
           .toList();
+      
+      // 시장 필터 적용
+      if (marketType != null && marketType != 'ALL') {
+        allData = allData.where((data) => data.marketType == marketType).toList();
+      }
+      
+      // 제한 개수만큼 잘라내기
+      final result = allData.take(limit).toList();
+      
+      print('✅ 실제 데이터 ${result.length}개 반환');
+      return result;
           
     } catch (e) {
-      // 데이터가 없는 경우 빈 리스트 반환 (테이블이 없을 수도 있음)
       print('외국인 수급 데이터 조회 실패: $e');
       return [];
     }
   }
 
-  // 일별 외국인 수급 요약 조회 (더미 데이터로 시작)
+  // 일별 외국인 수급 요약 조회 (실제 DB 연결)
   Future<List<DailyForeignSummary>> getDailyForeignSummary({
     String? startDate,
     String? endDate,
@@ -58,42 +68,101 @@ class ForeignInvestorService {
     int limit = 30,
   }) async {
     try {
-      // 실제 구현 전에 더미 데이터로 UI 테스트
-      final result = <DailyForeignSummary>[];
+      print('🔍 실제 DB에서 일별 외국인 수급 요약 조회 시작');
       
-      // 요청된 일수만큼 더미 데이터 생성 (최대 60일)
-      final daysToGenerate = limit > 60 ? 60 : limit;
-      for (int i = 0; i < daysToGenerate; i++) {
-        final date = DateTime.now().subtract(Duration(days: i));
-        final dateString = DateFormat('yyyyMMdd').format(date);
+      // 기본 날짜 설정
+      final String actualEndDate = endDate ?? DateFormat('yyyyMMdd').format(DateTime.now());
+      final String actualStartDate = startDate ?? DateFormat('yyyyMMdd').format(
+        DateTime.now().subtract(Duration(days: limit))
+      );
+      
+      // 전체 시장 데이터만 조회 (ticker가 null인 데이터)
+      final response = await _client
+          .from(tableName)
+          .select('date, market_type, investor_type, sell_amount, buy_amount, net_amount')
+          .gte('date', actualStartDate)
+          .lte('date', actualEndDate)
+          .order('date', ascending: false)
+          .limit(limit * 10); // 충분한 데이터 조회
+      
+      print('📊 일별 요약 DB 조회 결과: ${response.length}개 레코드');
+      
+      if (response.isEmpty) {
+        print('⚠️ 일별 요약 데이터가 없습니다.');
+        return [];
+      }
+      
+      // 전체 시장 데이터만 필터링 (ticker가 null인 데이터)
+      final marketData = response.where((item) => item['ticker'] == null).toList();
+      
+      // 날짜별로 그룹화하여 집계
+      final Map<String, Map<String, Map<String, int>>> grouped = {};
+      
+      for (final item in marketData) {
+        final date = item['date'] as String;
+        final market = item['market_type'] as String;
+        final investorType = item['investor_type'] as String;
         
-        // KOSPI 더미 데이터
-        if (marketType == null || marketType == 'ALL' || marketType == 'KOSPI') {
-          result.add(DailyForeignSummary(
-            date: dateString,
-            marketType: 'KOSPI',
-            foreignNetAmount: (i % 2 == 0 ? 1 : -1) * (1000000000 + i * 100000000),
-            otherForeignNetAmount: (i % 3 == 0 ? 1 : -1) * (50000000 + i * 10000000),
-            totalForeignNetAmount: (i % 2 == 0 ? 1 : -1) * (1050000000 + i * 110000000),
-            foreignBuyAmount: 5000000000 + i * 100000000,
-            foreignSellAmount: 4000000000 + i * 50000000,
-          ));
+        // 시장 필터 적용
+        if (marketType != null && marketType != 'ALL' && market != marketType) {
+          continue;
         }
         
-        // KOSDAQ 더미 데이터
-        if (marketType == null || marketType == 'ALL' || marketType == 'KOSDAQ') {
+        if (!grouped.containsKey(date)) {
+          grouped[date] = {};
+        }
+        if (!grouped[date]!.containsKey(market)) {
+          grouped[date]![market] = {
+            'foreign_net_amount': 0,
+            'other_foreign_net_amount': 0,
+            'foreign_buy_amount': 0,
+            'foreign_sell_amount': 0,
+          };
+        }
+        
+        final sellAmount = item['sell_amount'] as int? ?? 0;
+        final buyAmount = item['buy_amount'] as int? ?? 0;
+        final netAmount = item['net_amount'] as int? ?? 0;
+        
+        if (investorType == '외국인') {
+          grouped[date]![market]!['foreign_net_amount'] = netAmount;
+          grouped[date]![market]!['foreign_buy_amount'] = buyAmount;
+          grouped[date]![market]!['foreign_sell_amount'] = sellAmount;
+        } else if (investorType == '기타외국인') {
+          grouped[date]![market]!['other_foreign_net_amount'] = netAmount;
+        }
+      }
+      
+      // DailyForeignSummary 객체로 변환
+      final result = <DailyForeignSummary>[];
+      
+      for (final dateEntry in grouped.entries) {
+        final date = dateEntry.key;
+        final markets = dateEntry.value;
+        
+        for (final marketEntry in markets.entries) {
+          final market = marketEntry.key;
+          final amounts = marketEntry.value;
+          
+          final foreignNet = amounts['foreign_net_amount']!;
+          final otherForeignNet = amounts['other_foreign_net_amount']!;
+          
           result.add(DailyForeignSummary(
-            date: dateString,
-            marketType: 'KOSDAQ',
-            foreignNetAmount: (i % 2 == 1 ? 1 : -1) * (500000000 + i * 50000000),
-            otherForeignNetAmount: (i % 3 == 1 ? 1 : -1) * (25000000 + i * 5000000),
-            totalForeignNetAmount: (i % 2 == 1 ? 1 : -1) * (525000000 + i * 55000000),
-            foreignBuyAmount: 2500000000 + i * 50000000,
-            foreignSellAmount: 2000000000 + i * 25000000,
+            date: date,
+            marketType: market,
+            foreignNetAmount: foreignNet,
+            otherForeignNetAmount: otherForeignNet,
+            totalForeignNetAmount: foreignNet + otherForeignNet,
+            foreignBuyAmount: amounts['foreign_buy_amount']!,
+            foreignSellAmount: amounts['foreign_sell_amount']!,
           ));
         }
       }
       
+      // 날짜순 정렬 (최신순)
+      result.sort((a, b) => b.date.compareTo(a.date));
+      
+      print('✅ 일별 요약 데이터 ${result.length}개 반환');
       return result.take(limit).toList();
       
     } catch (e) {
@@ -102,105 +171,143 @@ class ForeignInvestorService {
     }
   }
 
-  // 외국인 순매수 상위 종목 조회 (더미 데이터)
+  // 외국인 순매수 상위 종목 조회 (실제 DB 연결)
   Future<List<ForeignInvestorData>> getTopForeignStocks({
     String? date,
     String? marketType,
     int limit = 20,
   }) async {
     try {
-      // 더미 상위 종목 데이터
-      final result = <ForeignInvestorData>[];
-      final today = DateFormat('yyyyMMdd').format(DateTime.now());
+      print('🔍 실제 DB에서 외국인 순매수 상위 종목 조회 시작');
       
-      final dummyStocks = [
-        {'ticker': '005930', 'name': '삼성전자', 'market': 'KOSPI', 'netAmount': 1500000000000},
-        {'ticker': '000660', 'name': 'SK하이닉스', 'market': 'KOSPI', 'netAmount': 800000000000},
-        {'ticker': '035420', 'name': 'NAVER', 'market': 'KOSPI', 'netAmount': 600000000000},
-        {'ticker': '005380', 'name': '현대차', 'market': 'KOSPI', 'netAmount': 400000000000},
-        {'ticker': '035720', 'name': '카카오', 'market': 'KOSPI', 'netAmount': 300000000000},
-        {'ticker': '373220', 'name': 'LG에너지솔루션', 'market': 'KOSPI', 'netAmount': 250000000000},
-        {'ticker': '207940', 'name': '삼성바이오로직스', 'market': 'KOSPI', 'netAmount': 200000000000},
-        {'ticker': '006400', 'name': '삼성SDI', 'market': 'KOSPI', 'netAmount': 180000000000},
-        {'ticker': '051910', 'name': 'LG화학', 'market': 'KOSPI', 'netAmount': 150000000000},
-        {'ticker': '096770', 'name': 'SK이노베이션', 'market': 'KOSPI', 'netAmount': 120000000000},
-      ];
+      // 기본 날짜 설정 (최근 5일 내)
+      final String queryDate = date ?? DateFormat('yyyyMMdd').format(DateTime.now());
+      final String startDate = DateFormat('yyyyMMdd').format(
+        DateTime.now().subtract(const Duration(days: 5))
+      );
       
-      for (int i = 0; i < dummyStocks.length && i < limit; i++) {
-        final stock = dummyStocks[i];
-        
-        // 시장 필터 적용
-        if (marketType != null && marketType != 'ALL' && stock['market'] != marketType) {
-          continue;
-        }
-        
-        result.add(ForeignInvestorData(
-          date: today,
-          marketType: stock['market'] as String,
-          investorType: '외국인',
-          ticker: stock['ticker'] as String,
-          stockName: stock['name'] as String,
-          sellAmount: 2000000000,
-          buyAmount: (stock['netAmount'] as int) + 2000000000,
-          netAmount: stock['netAmount'] as int,
-          createdAt: DateTime.now(),
-        ));
+      // 개별 종목 데이터만 조회 (ticker가 null이 아닌 데이터)
+      final response = await _client
+          .from(tableName)
+          .select('*')
+          .gte('date', startDate)
+          .lte('date', queryDate)
+          .order('net_amount', ascending: false)
+          .limit(limit * 3); // 필터링을 위해 더 많이 조회
+      
+      print('📊 상위 종목 DB 조회 결과: ${response.length}개 레코드');
+      
+      if (response.isEmpty) {
+        print('⚠️ 상위 종목 데이터가 없습니다.');
+        return [];
+      }
+      
+      // 개별 종목 데이터만 필터링 (ticker가 null이 아니고 외국인 순매수)
+      var stockData = response
+          .where((item) => 
+              item['ticker'] != null && 
+              item['investor_type'] == '외국인' &&
+              (item['net_amount'] as int? ?? 0) > 0)
+          .toList();
+      
+      // 시장 필터 적용
+      if (marketType != null && marketType != 'ALL') {
+        stockData = stockData.where((item) => item['market_type'] == marketType).toList();
+      }
+      
+      // 순매수 금액순으로 정렬
+      stockData.sort((a, b) => (b['net_amount'] as int).compareTo(a['net_amount'] as int));
+      
+      // 제한 개수만큼 잘라내기
+      final limitedData = stockData.take(limit).toList();
+      
+      final result = limitedData
+          .map<ForeignInvestorData>((json) => ForeignInvestorData.fromJson(json))
+          .toList();
+      
+      print('✅ 상위 종목 데이터 ${result.length}개 반환');
+      
+      // 실제 데이터가 없으면 더미 데이터로 fallback
+      if (result.isEmpty) {
+        print('⚠️ 실제 종목 데이터가 없어 더미 데이터로 fallback');
+        return _getDummyTopBuyStocks(marketType, limit);
       }
       
       return result;
       
     } catch (e) {
       print('외국인 순매수 상위 종목 조회 실패: $e');
-      return [];
+      return _getDummyTopBuyStocks(marketType, limit);
     }
   }
 
-  // 외국인 순매도 상위 종목 조회 (더미 데이터)
+  // 외국인 순매도 상위 종목 조회 (실제 DB 연결)
   Future<List<ForeignInvestorData>> getTopForeignSellStocks({
     String? date,
     String? marketType,
     int limit = 20,
   }) async {
     try {
-      // 더미 순매도 종목 데이터
-      final result = <ForeignInvestorData>[];
-      final today = DateFormat('yyyyMMdd').format(DateTime.now());
+      print('🔍 실제 DB에서 외국인 순매도 상위 종목 조회 시작');
       
-      final dummySellStocks = [
-        {'ticker': '068270', 'name': '셀트리온', 'market': 'KOSPI', 'netAmount': -300000000000},
-        {'ticker': '323410', 'name': '카카오뱅크', 'market': 'KOSPI', 'netAmount': -250000000000},
-        {'ticker': '003550', 'name': 'LG', 'market': 'KOSPI', 'netAmount': -200000000000},
-        {'ticker': '012330', 'name': '현대모비스', 'market': 'KOSPI', 'netAmount': -180000000000},
-        {'ticker': '028260', 'name': '삼성물산', 'market': 'KOSPI', 'netAmount': -150000000000},
-      ];
+      // 기본 날짜 설정 (최근 5일 내)
+      final String queryDate = date ?? DateFormat('yyyyMMdd').format(DateTime.now());
+      final String startDate = DateFormat('yyyyMMdd').format(
+        DateTime.now().subtract(const Duration(days: 5))
+      );
       
-      for (int i = 0; i < dummySellStocks.length && i < limit; i++) {
-        final stock = dummySellStocks[i];
-        
-        // 시장 필터 적용
-        if (marketType != null && marketType != 'ALL' && stock['market'] != marketType) {
-          continue;
-        }
-        
-        final netAmount = stock['netAmount'] as int;
-        result.add(ForeignInvestorData(
-          date: today,
-          marketType: stock['market'] as String,
-          investorType: '외국인',
-          ticker: stock['ticker'] as String,
-          stockName: stock['name'] as String,
-          sellAmount: netAmount.abs() + 1000000000,
-          buyAmount: 1000000000,
-          netAmount: netAmount,
-          createdAt: DateTime.now(),
-        ));
+      // 개별 종목 데이터만 조회 (ticker가 null이 아닌 데이터)
+      final response = await _client
+          .from(tableName)
+          .select('*')
+          .gte('date', startDate)
+          .lte('date', queryDate)
+          .order('net_amount', ascending: true) // 오름차순(가장 많이 판 것부터)
+          .limit(limit * 3); // 필터링을 위해 더 많이 조회
+      
+      print('📊 순매도 상위 종목 DB 조회 결과: ${response.length}개 레코드');
+      
+      if (response.isEmpty) {
+        print('⚠️ 순매도 상위 종목 데이터가 없습니다.');
+        return [];
+      }
+      
+      // 개별 종목 데이터만 필터링 (ticker가 null이 아니고 외국인 순매도)
+      var stockData = response
+          .where((item) => 
+              item['ticker'] != null && 
+              item['investor_type'] == '외국인' &&
+              (item['net_amount'] as int? ?? 0) < 0)
+          .toList();
+      
+      // 시장 필터 적용
+      if (marketType != null && marketType != 'ALL') {
+        stockData = stockData.where((item) => item['market_type'] == marketType).toList();
+      }
+      
+      // 순매도 금액순으로 정렬 (절댓값 기준)
+      stockData.sort((a, b) => (a['net_amount'] as int).compareTo(b['net_amount'] as int));
+      
+      // 제한 개수만큼 잘라내기
+      final limitedData = stockData.take(limit).toList();
+      
+      final result = limitedData
+          .map<ForeignInvestorData>((json) => ForeignInvestorData.fromJson(json))
+          .toList();
+      
+      print('✅ 순매도 상위 종목 데이터 ${result.length}개 반환');
+      
+      // 실제 데이터가 없으면 더미 데이터로 fallback
+      if (result.isEmpty) {
+        print('⚠️ 실제 종목 데이터가 없어 더미 데이터로 fallback');
+        return _getDummyTopSellStocks(marketType, limit);
       }
       
       return result;
       
     } catch (e) {
       print('외국인 순매도 상위 종목 조회 실패: $e');
-      return [];
+      return _getDummyTopSellStocks(marketType, limit);
     }
   }
 
@@ -273,6 +380,86 @@ class ForeignInvestorService {
   static String getDaysAgoString(int days) {
     final date = DateTime.now().subtract(Duration(days: days));
     return DateFormat('yyyyMMdd').format(date);
+  }
+
+  // 더미 상위 매수 종목 데이터 (fallback)
+  List<ForeignInvestorData> _getDummyTopBuyStocks(String? marketType, int limit) {
+    final result = <ForeignInvestorData>[];
+    final today = DateFormat('yyyyMMdd').format(DateTime.now());
+    
+    final dummyStocks = [
+      {'ticker': '005930', 'name': '삼성전자', 'market': 'KOSPI', 'netAmount': 1500000000000},
+      {'ticker': '000660', 'name': 'SK하이닉스', 'market': 'KOSPI', 'netAmount': 800000000000},
+      {'ticker': '035420', 'name': 'NAVER', 'market': 'KOSPI', 'netAmount': 600000000000},
+      {'ticker': '005380', 'name': '현대차', 'market': 'KOSPI', 'netAmount': 400000000000},
+      {'ticker': '035720', 'name': '카카오', 'market': 'KOSPI', 'netAmount': 300000000000},
+      {'ticker': '373220', 'name': 'LG에너지솔루션', 'market': 'KOSPI', 'netAmount': 250000000000},
+      {'ticker': '207940', 'name': '삼성바이오로직스', 'market': 'KOSPI', 'netAmount': 200000000000},
+      {'ticker': '006400', 'name': '삼성SDI', 'market': 'KOSPI', 'netAmount': 180000000000},
+      {'ticker': '051910', 'name': 'LG화학', 'market': 'KOSPI', 'netAmount': 150000000000},
+      {'ticker': '096770', 'name': 'SK이노베이션', 'market': 'KOSPI', 'netAmount': 120000000000},
+    ];
+    
+    for (int i = 0; i < dummyStocks.length && i < limit; i++) {
+      final stock = dummyStocks[i];
+      
+      // 시장 필터 적용
+      if (marketType != null && marketType != 'ALL' && stock['market'] != marketType) {
+        continue;
+      }
+      
+      result.add(ForeignInvestorData(
+        date: today,
+        marketType: stock['market'] as String,
+        investorType: '외국인',
+        ticker: stock['ticker'] as String,
+        stockName: stock['name'] as String,
+        sellAmount: 2000000000,
+        buyAmount: (stock['netAmount'] as int) + 2000000000,
+        netAmount: stock['netAmount'] as int,
+        createdAt: DateTime.now(),
+      ));
+    }
+    
+    return result;
+  }
+  
+  // 더미 상위 매도 종목 데이터 (fallback)  
+  List<ForeignInvestorData> _getDummyTopSellStocks(String? marketType, int limit) {
+    final result = <ForeignInvestorData>[];
+    final today = DateFormat('yyyyMMdd').format(DateTime.now());
+    
+    final dummySellStocks = [
+      {'ticker': '068270', 'name': '셀트리온', 'market': 'KOSPI', 'netAmount': -300000000000},
+      {'ticker': '323410', 'name': '카카오뱅크', 'market': 'KOSPI', 'netAmount': -250000000000},
+      {'ticker': '003550', 'name': 'LG', 'market': 'KOSPI', 'netAmount': -200000000000},
+      {'ticker': '012330', 'name': '현대모비스', 'market': 'KOSPI', 'netAmount': -180000000000},
+      {'ticker': '028260', 'name': '삼성물산', 'market': 'KOSPI', 'netAmount': -150000000000},
+    ];
+    
+    for (int i = 0; i < dummySellStocks.length && i < limit; i++) {
+      final stock = dummySellStocks[i];
+      
+      // 시장 필터 적용
+      if (marketType != null && marketType != 'ALL' && stock['market'] != marketType) {
+        continue;
+      }
+      
+      final netAmount = stock['netAmount'] as int;
+      result.add(ForeignInvestorData(
+        date: today,
+        marketType: stock['market'] as String,
+        investorType: '외국인',
+        ticker: stock['ticker'] as String,
+        stockName: stock['name'] as String,
+        sellAmount: netAmount.abs() + 1000000000,
+        buyAmount: 1000000000,
+        netAmount: netAmount,
+        createdAt: DateTime.now(),
+      ));
+    }
+    
+    return result;
   }
 
   // 리소스 정리

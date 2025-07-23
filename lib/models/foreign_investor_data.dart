@@ -118,6 +118,9 @@ class DailyForeignSummary {
   final int totalForeignNetAmount; // 전체 외국인 순매수
   final int foreignBuyAmount; // 외국인 매수금액
   final int foreignSellAmount; // 외국인 매도금액
+  
+  // 누적 보유액 (계산된 값)
+  int cumulativeHoldings = 0;
 
   DailyForeignSummary({
     required this.date,
@@ -127,6 +130,7 @@ class DailyForeignSummary {
     required this.totalForeignNetAmount,
     required this.foreignBuyAmount,
     required this.foreignSellAmount,
+    this.cumulativeHoldings = 0,
   });
 
   factory DailyForeignSummary.fromJson(Map<String, dynamic> json) {

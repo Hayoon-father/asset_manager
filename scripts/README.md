@@ -2,7 +2,25 @@
 
 pykrx를 활용하여 한국 증시의 외국인 투자자 거래 데이터를 수집하고 Supabase에 저장하는 Python 스크립트입니다.
 
-## 설치 방법
+## 빠른 시작 (2020년부터 전체 데이터 수집)
+
+```bash
+# 스크립트 실행 권한 부여 (최초 1회)
+chmod +x run_data_collection.sh
+
+# 2020년 1월 1일부터 현재까지 모든 데이터 수집
+./run_data_collection.sh
+```
+
+이 스크립트는 다음 작업을 자동으로 수행합니다:
+1. Python 가상환경 생성 및 활성화
+2. 필요한 패키지 설치
+3. 2020년 1월 1일부터 현재까지 일별 데이터 수집
+4. 수집된 데이터 검증
+
+## 수동 설치 및 사용법
+
+### 1. 설치 방법
 
 1. Python 가상환경 생성 및 활성화
 ```bash
@@ -17,9 +35,9 @@ venv\Scripts\activate     # Windows
 pip install -r requirements.txt
 ```
 
-## 사용 방법
+### 2. 사용 방법
 
-### 1. 일별 데이터 수집 (기본 모드)
+#### 일별 데이터 수집 (기본 모드)
 ```bash
 # 어제 데이터 수집
 python foreign_investor_collector.py
@@ -31,13 +49,30 @@ python foreign_investor_collector.py daily
 python foreign_investor_collector.py daily 20240715
 ```
 
-### 2. 히스토리 데이터 수집
+#### 기간별 데이터 수집
 ```bash
 # 2023년 1월부터 현재까지
 python foreign_investor_collector.py historical 20230101
 
 # 특정 기간
 python foreign_investor_collector.py historical 20230101 20231231
+```
+
+#### 대량 히스토리 데이터 수집 (2020년부터)
+```bash
+# 2020년 1월 1일부터 현재까지
+python foreign_investor_collector.py bulk
+
+# 특정 시작일부터
+python foreign_investor_collector.py bulk 20200101
+
+# 기간 지정
+python foreign_investor_collector.py bulk 20200101 20231231
+```
+
+#### 데이터 완성도 검증
+```bash
+python foreign_investor_collector.py verify 20200101 20231231
 ```
 
 ## 수집되는 데이터
