@@ -1,13 +1,17 @@
 import 'package:flutter/foundation.dart';
 import '../models/foreign_investor_data.dart';
 import '../services/foreign_investor_service.dart';
+import '../services/data_sync_service.dart';
 
 class ForeignInvestorProvider with ChangeNotifier {
   final ForeignInvestorService _service = ForeignInvestorService();
+  final DataSyncService _syncService = DataSyncService();
   
   // 상태 변수들
   bool _isLoading = false;
   String? _errorMessage;
+  bool _isDataSyncing = false;
+  String? _syncMessage;
   
   // 데이터 변수들
   List<ForeignInvestorData> _latestData = [];
@@ -27,6 +31,8 @@ class ForeignInvestorProvider with ChangeNotifier {
   // Getters
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  bool get isDataSyncing => _isDataSyncing;
+  String? get syncMessage => _syncMessage;
   List<ForeignInvestorData> get latestData => _latestData;
   List<DailyForeignSummary> get dailySummary => _dailySummary;
   List<DailyForeignSummary> get chartDailySummary => _chartDailySummary; // 차트용 데이터
@@ -64,7 +70,12 @@ class ForeignInvestorProvider with ChangeNotifier {
     _clearError();
     
     try {
-      print('데이터 로딩 중...');
+      // 1단계: pykrx 데이터 동기화 (백그라운드)
+      print('🔄 pykrx API 데이터 동기화 시작...');
+      _performDataSyncInBackground();
+      
+      // 2단계: 기존 DB 데이터 로드 (즉시 UI 업데이트)
+      print('📊 기존 DB 데이터 로딩 중...');
       await Future.wait([
         loadLatestData(),
         loadDailySummary(),
@@ -84,6 +95,55 @@ class ForeignInvestorProvider with ChangeNotifier {
     } finally {
       _setLoading(false);
       print('로딩 상태 해제됨');
+    }
+  }
+
+  // 백그라운드에서 데이터 동기화 수행
+  Future<void> _performDataSyncInBackground() async {
+    _isDataSyncing = true;
+    _syncMessage = 'pykrx API에서 최신 데이터 확인 중...';
+    notifyListeners();
+    
+    try {
+      final syncResult = await _syncService.syncLatestData();
+      
+      if (syncResult.success && syncResult.newDataCount > 0) {
+        _syncMessage = '${syncResult.newDataCount}개의 새로운 데이터가 추가되었습니다';
+        print('🎉 데이터 동기화 성공: ${syncResult.newDataCount}개 신규 데이터 추가됨');
+        
+        // 새로운 데이터가 있으면 UI 다시 로드
+        await _refreshAllDataSilently();
+      } else {
+        _syncMessage = syncResult.message;
+        print('ℹ️ 데이터 동기화 완료: ${syncResult.message}');
+      }
+    } catch (e) {
+      _syncMessage = 'pykrx API 연결 실패 - 기존 데이터 사용';
+      print('⚠️ 데이터 동기화 실패: $e');
+    } finally {
+      _isDataSyncing = false;
+      notifyListeners();
+      
+      // 5초 후 동기화 메시지 숨김
+      Future.delayed(const Duration(seconds: 5), () {
+        _syncMessage = null;
+        notifyListeners();
+      });
+    }
+  }
+
+  // 조용한 데이터 새로고침 (로딩 상태 표시 없이)
+  Future<void> _refreshAllDataSilently() async {
+    try {
+      await Future.wait([
+        loadLatestData(),
+        loadDailySummary(),
+        loadChartDailySummary(),
+        loadTopStocks(),
+      ]);
+      notifyListeners();
+    } catch (e) {
+      print('⚠️ 조용한 데이터 새로고침 실패: $e');
     }
   }
   
@@ -451,13 +511,11 @@ class ForeignInvestorProvider with ChangeNotifier {
       int totalNetAmount = 0;
       int totalBuyAmount = 0;
       int totalSellAmount = 0;
-      int totalTradeAmount = 0;
       
       for (final summary in summaries) {
         totalNetAmount += summary.totalForeignNetAmount;
         totalBuyAmount += summary.foreignBuyAmount;
         totalSellAmount += summary.foreignSellAmount;
-        totalTradeAmount += summary.foreignTotalTradeAmount;
       }
       
       // 합계 데이터로 새로운 DailyForeignSummary 생성

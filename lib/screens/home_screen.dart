@@ -100,6 +100,10 @@ class _HomeScreenState extends State<HomeScreen>
                   // 필터 칩들
                   const FilterChips(),
                   
+                  // 데이터 동기화 상태 표시
+                  if (provider.isDataSyncing || provider.syncMessage != null)
+                    _buildSyncStatus(provider),
+                  
                   // 탭 컨텐츠
                   Expanded(
                     child: TabBarView(
@@ -591,6 +595,56 @@ class _HomeScreenState extends State<HomeScreen>
     if (data.isEmpty) return const SizedBox();
     
     return _InteractiveChart(data: data);
+  }
+
+  Widget _buildSyncStatus(ForeignInvestorProvider provider) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: provider.isDataSyncing 
+            ? Colors.blue.shade50 
+            : Colors.green.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: provider.isDataSyncing 
+              ? Colors.blue.shade200 
+              : Colors.green.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          if (provider.isDataSyncing)
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+              ),
+            )
+          else
+            Icon(
+              Icons.check_circle,
+              size: 16,
+              color: Colors.green.shade600,
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              provider.syncMessage ?? 'pykrx API 동기화 중...',
+              style: TextStyle(
+                fontSize: 12,
+                color: provider.isDataSyncing 
+                    ? Colors.blue.shade700 
+                    : Colors.green.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildDataTile(dynamic data) {

@@ -52,6 +52,38 @@ class ForeignInvestorData {
     );
   }
 
+  // pykrx API 응답용 팩토리 메서드
+  factory ForeignInvestorData.fromPykrxJson(Map<String, dynamic> json) {
+    return ForeignInvestorData(
+      date: json['날짜'] ?? json['date'] ?? '',
+      marketType: json['시장구분'] ?? json['market_type'] ?? '',
+      investorType: json['투자자구분'] ?? json['investor_type'] ?? '외국인',  
+      ticker: json['종목코드'] ?? json['ticker'],
+      stockName: json['종목명'] ?? json['stock_name'],
+      sellAmount: _parseAmount(json['매도금액'] ?? json['sell_amount'] ?? 0) ?? 0,
+      buyAmount: _parseAmount(json['매수금액'] ?? json['buy_amount'] ?? 0) ?? 0,
+      netAmount: _parseAmount(json['순매수금액'] ?? json['net_amount'] ?? 0) ?? 0,
+      sellVolume: _parseAmount(json['매도수량'] ?? json['sell_volume']),
+      buyVolume: _parseAmount(json['매수수량'] ?? json['buy_volume']),
+      netVolume: _parseAmount(json['순매수수량'] ?? json['net_volume']),
+      createdAt: DateTime.now(),
+      updatedAt: null,
+    );
+  }
+
+  // 문자열이나 숫자를 int로 파싱하는 헬퍼 메서드
+  static int? _parseAmount(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      // 쉼표 제거하고 숫자만 추출
+      final cleanValue = value.replaceAll(',', '').replaceAll(' ', '');
+      return int.tryParse(cleanValue);
+    }
+    return null;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
