@@ -369,7 +369,7 @@ class ForeignInvestorService {
         }
       }
       
-      // 순매수 상위 종목 필터링 및 정렬
+      // 순매수 상위 종목 필터링 및 정렬 (순매수 금액 기준)
       final topBuyStocks = stockSummary.values
           .where((stock) => (stock['total_net_amount'] as int) > 0)
           .toList()
@@ -396,6 +396,98 @@ class ForeignInvestorService {
       
     } catch (e) {
       print('❌ 기간별 순매수 상위 종목 조회 실패: $e');
+      return _getDummyTopBuyStocks(marketType, limit);
+    }
+  }
+
+  // 기간별 외국인 거래금액 상위 종목 조회 (합계 기준)
+  Future<List<ForeignInvestorData>> getTopForeignStocksByTradeAmount({
+    required String fromDate,
+    required String toDate,
+    String? marketType,
+    int limit = 20,
+  }) async {
+    try {
+      print('🔍 기간별 외국인 거래금액 상위 종목 조회: ${fromDate} ~ ${toDate}');
+      
+      // 개별 종목 데이터만 조회 (ticker가 null이 아닌 데이터)
+      var queryBuilder = _client
+          .from(tableName)
+          .select('ticker, stock_name, market_type, investor_type, date, buy_amount, sell_amount, net_amount')
+          .gte('date', fromDate)
+          .lte('date', toDate)
+          .eq('investor_type', '외국인')
+          .not('ticker', 'is', null);
+      
+      // 시장 필터 적용
+      if (marketType != null && marketType != 'ALL') {
+        queryBuilder = queryBuilder.eq('market_type', marketType);
+      }
+      
+      final response = await queryBuilder.order('date', ascending: false);
+      
+      print('📊 기간별 거래금액 종목 DB 조회 결과: ${response.length}개 레코드');
+      
+      if (response.isEmpty) {
+        print('⚠️ 기간별 거래금액 종목 데이터가 없습니다.');
+        return _getDummyTopBuyStocks(marketType, limit);
+      }
+      
+      // 종목별로 그룹화하여 합계 계산
+      final Map<String, Map<String, dynamic>> stockSummary = {};
+      
+      for (final item in response) {
+        final ticker = item['ticker'] as String;
+        final netAmount = item['net_amount'] as int? ?? 0;
+        final buyAmount = item['buy_amount'] as int? ?? 0;
+        final sellAmount = item['sell_amount'] as int? ?? 0;
+        
+        if (stockSummary.containsKey(ticker)) {
+          stockSummary[ticker]!['total_net_amount'] += netAmount;
+          stockSummary[ticker]!['total_buy_amount'] += buyAmount;
+          stockSummary[ticker]!['total_sell_amount'] += sellAmount;
+        } else {
+          stockSummary[ticker] = {
+            'ticker': ticker,
+            'stock_name': item['stock_name'],
+            'market_type': item['market_type'],
+            'total_net_amount': netAmount,
+            'total_buy_amount': buyAmount,
+            'total_sell_amount': sellAmount,
+          };
+        }
+      }
+      
+      // 거래금액(매수+매도) 기준 정렬
+      final topTradeAmountStocks = stockSummary.values
+          .toList()
+        ..sort((a, b) {
+          final aTradeAmount = (a['total_buy_amount'] as int) + (a['total_sell_amount'] as int);
+          final bTradeAmount = (b['total_buy_amount'] as int) + (b['total_sell_amount'] as int);
+          return bTradeAmount.compareTo(aTradeAmount);
+        });
+      
+      final limitedStocks = topTradeAmountStocks.take(limit).toList();
+      
+      final result = limitedStocks.map<ForeignInvestorData>((stock) {
+        return ForeignInvestorData(
+          date: toDate,
+          marketType: stock['market_type'] ?? '',
+          investorType: '외국인',
+          ticker: stock['ticker'],
+          stockName: stock['stock_name'],
+          buyAmount: stock['total_buy_amount'] ?? 0,
+          sellAmount: stock['total_sell_amount'] ?? 0,
+          netAmount: stock['total_net_amount'] ?? 0,
+          createdAt: DateTime.now(),
+        );
+      }).toList();
+      
+      print('✅ 기간별 거래금액 상위 종목 데이터 ${result.length}개 반환');
+      return result;
+      
+    } catch (e) {
+      print('❌ 기간별 거래금액 상위 종목 조회 실패: $e');
       return _getDummyTopBuyStocks(marketType, limit);
     }
   }
@@ -458,11 +550,34 @@ class ForeignInvestorService {
         }
       }
       
-      // 순매도 상위 종목 필터링 및 정렬
-      final topSellStocks = stockSummary.values
+      // 디버깅: 전체 종목 현황 확인
+      final allStocks = stockSummary.values.toList();
+      final sellStocks = allStocks.where((stock) => (stock['total_net_amount'] as int) < 0).toList();
+      final buyStocks = allStocks.where((stock) => (stock['total_net_amount'] as int) > 0).toList();
+      
+      print('📊 종목 분석: 전체 ${allStocks.length}개, 순매수 ${buyStocks.length}개, 순매도 ${sellStocks.length}개');
+      
+      // 순매도 상위 종목 필터링 및 정렬 (순매도 금액 기준)
+      var topSellStocks = stockSummary.values
           .where((stock) => (stock['total_net_amount'] as int) < 0)
           .toList()
         ..sort((a, b) => (a['total_net_amount'] as int).compareTo(b['total_net_amount'] as int));
+      
+      // 순매도 종목이 충분하지 않으면 순매수가 가장 적은 종목들로 보완
+      if (topSellStocks.length < limit) {
+        print('⚠️ 순매도 종목이 ${topSellStocks.length}개뿐이어서 순매수가 적은 종목들로 보완합니다.');
+        
+        // 순매수가 적은 종목들 추가 (0 이상인 것들 중 가장 적은 순)
+        final lowBuyStocks = stockSummary.values
+            .where((stock) => (stock['total_net_amount'] as int) >= 0)
+            .toList()
+          ..sort((a, b) => (a['total_net_amount'] as int).compareTo(b['total_net_amount'] as int));
+        
+        // 순매도 종목과 순매수가 적은 종목을 합쳐서 정렬
+        final allCandidates = [...topSellStocks, ...lowBuyStocks.take(limit - topSellStocks.length)];
+        topSellStocks = allCandidates
+          ..sort((a, b) => (a['total_net_amount'] as int).compareTo(b['total_net_amount'] as int));
+      }
       
       final limitedStocks = topSellStocks.take(limit).toList();
       
@@ -613,6 +728,13 @@ class ForeignInvestorService {
       {'ticker': '003550', 'name': 'LG', 'market': 'KOSPI', 'netAmount': -200000000000},
       {'ticker': '012330', 'name': '현대모비스', 'market': 'KOSPI', 'netAmount': -180000000000},
       {'ticker': '028260', 'name': '삼성물산', 'market': 'KOSPI', 'netAmount': -150000000000},
+      {'ticker': '105560', 'name': 'KB금융', 'market': 'KOSPI', 'netAmount': -120000000000},
+      {'ticker': '086790', 'name': '하나금융지주', 'market': 'KOSPI', 'netAmount': -100000000000},
+      {'ticker': '015760', 'name': '한국전력', 'market': 'KOSPI', 'netAmount': -90000000000},
+      {'ticker': '009150', 'name': '삼성전기', 'market': 'KOSPI', 'netAmount': -80000000000},
+      {'ticker': '034730', 'name': 'SK', 'market': 'KOSPI', 'netAmount': -70000000000},
+      {'ticker': '251270', 'name': '넷마블', 'market': 'KOSPI', 'netAmount': -60000000000},
+      {'ticker': '017670', 'name': 'SK텔레콤', 'market': 'KOSPI', 'netAmount': -50000000000},
     ];
     
     for (int i = 0; i < dummySellStocks.length && i < limit; i++) {

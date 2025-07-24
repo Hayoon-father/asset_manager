@@ -217,18 +217,18 @@ class _HomeScreenState extends State<HomeScreen>
             const SizedBox(height: 16),
           ],
           
-          // 외국인 순매수 상위
+          // 외국인 순매수 상위 (순매수 금액 기준)
           TopStocksList(
-            title: '외국인 순매수 상위',
+            title: '외국인 순매수 상위 (순매수 금액 기준)',
             stocks: provider.topBuyStocks,
             isPositive: true,
           ),
           
           const SizedBox(height: 16),
           
-          // 외국인 순매도 상위
+          // 외국인 순매도 상위 (순매도 금액 기준)
           TopStocksList(
-            title: '외국인 순매도 상위',
+            title: '외국인 순매도 상위 (순매도 금액 기준)',
             stocks: provider.topSellStocks,
             isPositive: false,
           ),

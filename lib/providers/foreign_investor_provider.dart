@@ -425,17 +425,37 @@ class ForeignInvestorProvider with ChangeNotifier {
         marketFilter = _selectedMarket;
       }
       
-      // 병렬로 상위 매수/매도 종목 조회
+      // 선택된 기간 정보 가져오기
+      final dateRange = getCurrentDateRange();
+      final fromDate = dateRange['fromDate']!.replaceAll('.', '');
+      final toDate = dateRange['toDate']!.replaceAll('.', '');
+      
+      print('🔍 날짜 범위별 상위 종목 조회: ${fromDate} ~ ${toDate}, 시장: ${marketFilter ?? 'ALL'}');
+      
+      // 기간별 상위 매수/매도 종목 조회 (기간별 메서드 사용)
       final futures = await Future.wait([
-        _service.getTopForeignStocks(marketType: marketFilter, limit: 10),
-        _service.getTopForeignSellStocks(marketType: marketFilter, limit: 10),
+        _service.getTopForeignStocksByDateRange(
+          fromDate: fromDate,
+          toDate: toDate,
+          marketType: marketFilter, 
+          limit: 10
+        ),
+        _service.getTopForeignSellStocksByDateRange(
+          fromDate: fromDate,
+          toDate: toDate,
+          marketType: marketFilter, 
+          limit: 10
+        ),
       ]);
       
       _topBuyStocks = futures[0];
       _topSellStocks = futures[1];
       
+      print('📊 날짜 범위별 상위 종목 조회 완료: 매수 ${_topBuyStocks.length}개, 매도 ${_topSellStocks.length}개');
+      
     } catch (e) {
       _setError('날짜 범위별 상위 종목 데이터 로드 실패: $e');
+      print('날짜 범위별 상위 종목 데이터 로드 실패: $e');
     }
   }
 

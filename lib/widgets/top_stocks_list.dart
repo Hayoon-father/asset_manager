@@ -72,8 +72,10 @@ class TopStocksList extends StatelessWidget {
   Widget _buildStockTile(BuildContext context, ForeignInvestorData stock, int rank) {
     final rankColor = _getRankColor(rank);
     
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+    return Container(
+      height: 72, // 명시적인 높이 설정
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
       leading: Container(
         width: 32,
         height: 32,
@@ -130,28 +132,43 @@ class TopStocksList extends StatelessWidget {
           ),
         ],
       ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            _formatAmount(stock.netAmount.abs()),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: isPositive ? Colors.red : Colors.blue,
+      trailing: SizedBox(
+        width: 100,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _formatAmount(stock.netAmount.abs()),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isPositive ? Colors.red : Colors.blue,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          Text(
-            isPositive ? '순매수' : '순매도',
-            style: const TextStyle(
-              fontSize: 10,
-              color: Colors.grey,
+            Text(
+              isPositive ? '순매수' : '순매도',
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.grey,
+              ),
             ),
-          ),
-        ],
+            if (stock.totalTradeAmount > 0)
+              Text(
+                '거래: ${_formatAmount(stock.totalTradeAmount)}',
+                style: const TextStyle(
+                  fontSize: 8,
+                  color: Colors.grey,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
       ),
       onTap: () => _showStockDetails(context, stock),
+      ),
     );
   }
 
