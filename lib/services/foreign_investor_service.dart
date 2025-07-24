@@ -311,6 +311,184 @@ class ForeignInvestorService {
     }
   }
 
+  // 기간별 외국인 순매수 상위 종목 조회 (합계 기준)
+  Future<List<ForeignInvestorData>> getTopForeignStocksByDateRange({
+    required String fromDate,
+    required String toDate,
+    String? marketType,
+    int limit = 20,
+  }) async {
+    try {
+      print('🔍 기간별 외국인 순매수 상위 종목 조회: ${fromDate} ~ ${toDate}');
+      
+      // 개별 종목 데이터만 조회 (ticker가 null이 아닌 데이터)
+      var queryBuilder = _client
+          .from(tableName)
+          .select('ticker, stock_name, market_type, investor_type, date, buy_amount, sell_amount, net_amount')
+          .gte('date', fromDate)
+          .lte('date', toDate)
+          .eq('investor_type', '외국인')
+          .not('ticker', 'is', null);
+      
+      // 시장 필터 적용
+      if (marketType != null && marketType != 'ALL') {
+        queryBuilder = queryBuilder.eq('market_type', marketType);
+      }
+      
+      final response = await queryBuilder.order('date', ascending: false);
+      
+      print('📊 기간별 순매수 종목 DB 조회 결과: ${response.length}개 레코드');
+      
+      if (response.isEmpty) {
+        print('⚠️ 기간별 순매수 종목 데이터가 없습니다.');
+        return _getDummyTopBuyStocks(marketType, limit);
+      }
+      
+      // 종목별로 그룹화하여 합계 계산
+      final Map<String, Map<String, dynamic>> stockSummary = {};
+      
+      for (final item in response) {
+        final ticker = item['ticker'] as String;
+        final netAmount = item['net_amount'] as int? ?? 0;
+        final buyAmount = item['buy_amount'] as int? ?? 0;
+        final sellAmount = item['sell_amount'] as int? ?? 0;
+        
+        if (stockSummary.containsKey(ticker)) {
+          stockSummary[ticker]!['total_net_amount'] += netAmount;
+          stockSummary[ticker]!['total_buy_amount'] += buyAmount;
+          stockSummary[ticker]!['total_sell_amount'] += sellAmount;
+        } else {
+          stockSummary[ticker] = {
+            'ticker': ticker,
+            'stock_name': item['stock_name'],
+            'market_type': item['market_type'],
+            'total_net_amount': netAmount,
+            'total_buy_amount': buyAmount,
+            'total_sell_amount': sellAmount,
+          };
+        }
+      }
+      
+      // 순매수 상위 종목 필터링 및 정렬
+      final topBuyStocks = stockSummary.values
+          .where((stock) => (stock['total_net_amount'] as int) > 0)
+          .toList()
+        ..sort((a, b) => (b['total_net_amount'] as int).compareTo(a['total_net_amount'] as int));
+      
+      final limitedStocks = topBuyStocks.take(limit).toList();
+      
+      final result = limitedStocks.map<ForeignInvestorData>((stock) {
+        return ForeignInvestorData(
+          date: toDate,
+          marketType: stock['market_type'] ?? '',
+          investorType: '외국인',
+          ticker: stock['ticker'],
+          stockName: stock['stock_name'],
+          buyAmount: stock['total_buy_amount'] ?? 0,
+          sellAmount: stock['total_sell_amount'] ?? 0,
+          netAmount: stock['total_net_amount'] ?? 0,
+          createdAt: DateTime.now(),
+        );
+      }).toList();
+      
+      print('✅ 기간별 순매수 상위 종목 데이터 ${result.length}개 반환');
+      return result;
+      
+    } catch (e) {
+      print('❌ 기간별 순매수 상위 종목 조회 실패: $e');
+      return _getDummyTopBuyStocks(marketType, limit);
+    }
+  }
+
+  // 기간별 외국인 순매도 상위 종목 조회 (합계 기준)
+  Future<List<ForeignInvestorData>> getTopForeignSellStocksByDateRange({
+    required String fromDate,
+    required String toDate,
+    String? marketType,
+    int limit = 20,
+  }) async {
+    try {
+      print('🔍 기간별 외국인 순매도 상위 종목 조회: ${fromDate} ~ ${toDate}');
+      
+      // 개별 종목 데이터만 조회 (ticker가 null이 아닌 데이터)
+      var queryBuilder = _client
+          .from(tableName)
+          .select('ticker, stock_name, market_type, investor_type, date, buy_amount, sell_amount, net_amount')
+          .gte('date', fromDate)
+          .lte('date', toDate)
+          .eq('investor_type', '외국인')
+          .not('ticker', 'is', null);
+      
+      // 시장 필터 적용
+      if (marketType != null && marketType != 'ALL') {
+        queryBuilder = queryBuilder.eq('market_type', marketType);
+      }
+      
+      final response = await queryBuilder.order('date', ascending: false);
+      
+      print('📊 기간별 순매도 종목 DB 조회 결과: ${response.length}개 레코드');
+      
+      if (response.isEmpty) {
+        print('⚠️ 기간별 순매도 종목 데이터가 없습니다.');
+        return _getDummyTopSellStocks(marketType, limit);
+      }
+      
+      // 종목별로 그룹화하여 합계 계산
+      final Map<String, Map<String, dynamic>> stockSummary = {};
+      
+      for (final item in response) {
+        final ticker = item['ticker'] as String;
+        final netAmount = item['net_amount'] as int? ?? 0;
+        final buyAmount = item['buy_amount'] as int? ?? 0;
+        final sellAmount = item['sell_amount'] as int? ?? 0;
+        
+        if (stockSummary.containsKey(ticker)) {
+          stockSummary[ticker]!['total_net_amount'] += netAmount;
+          stockSummary[ticker]!['total_buy_amount'] += buyAmount;
+          stockSummary[ticker]!['total_sell_amount'] += sellAmount;
+        } else {
+          stockSummary[ticker] = {
+            'ticker': ticker,
+            'stock_name': item['stock_name'],
+            'market_type': item['market_type'],
+            'total_net_amount': netAmount,
+            'total_buy_amount': buyAmount,
+            'total_sell_amount': sellAmount,
+          };
+        }
+      }
+      
+      // 순매도 상위 종목 필터링 및 정렬
+      final topSellStocks = stockSummary.values
+          .where((stock) => (stock['total_net_amount'] as int) < 0)
+          .toList()
+        ..sort((a, b) => (a['total_net_amount'] as int).compareTo(b['total_net_amount'] as int));
+      
+      final limitedStocks = topSellStocks.take(limit).toList();
+      
+      final result = limitedStocks.map<ForeignInvestorData>((stock) {
+        return ForeignInvestorData(
+          date: toDate,
+          marketType: stock['market_type'] ?? '',
+          investorType: '외국인',
+          ticker: stock['ticker'],
+          stockName: stock['stock_name'],
+          buyAmount: stock['total_buy_amount'] ?? 0,
+          sellAmount: stock['total_sell_amount'] ?? 0,
+          netAmount: stock['total_net_amount'] ?? 0,
+          createdAt: DateTime.now(),
+        );
+      }).toList();
+      
+      print('✅ 기간별 순매도 상위 종목 데이터 ${result.length}개 반환');
+      return result;
+      
+    } catch (e) {
+      print('❌ 기간별 순매도 상위 종목 조회 실패: $e');
+      return _getDummyTopSellStocks(marketType, limit);
+    }
+  }
+
   // 데이터 삽입/업데이트 (upsert)
   Future<void> upsertForeignInvestorData(List<ForeignInvestorData> dataList) async {
     try {

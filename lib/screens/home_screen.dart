@@ -188,7 +188,7 @@ class _HomeScreenState extends State<HomeScreen>
             title: '전체 외국인 순매수',
             amount: provider.totalForeignNetAmount,
             isPositive: provider.isForeignBuyDominant,
-            subtitle: provider.isForeignBuyDominant ? '매수 우세' : '매도 우세',
+            subtitle: '총 거래금액: ${provider.formatAmount(provider.totalTradeAmount)}',
           ),
           
           const SizedBox(height: 16),
@@ -198,16 +198,18 @@ class _HomeScreenState extends State<HomeScreen>
             Row(
               children: [
                 Expanded(
-                  child: _buildMarketCard(
+                  child: _buildMarketSummaryCard(
                     'KOSPI',
-                    provider.getKospiSummary(),
+                    provider.kospiTotalTradeAmount,
+                    provider.getKospiSummary().fold<int>(0, (sum, s) => sum + s.totalForeignNetAmount),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _buildMarketCard(
+                  child: _buildMarketSummaryCard(
                     'KOSDAQ',
-                    provider.getKosdaqSummary(),
+                    provider.kosdaqTotalTradeAmount,
+                    provider.getKosdaqSummary().fold<int>(0, (sum, s) => sum + s.totalForeignNetAmount),
                   ),
                 ),
               ],
@@ -281,6 +283,59 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  // 기간별 데이터를 보여주는 새로운 시장 요약 카드
+  Widget _buildMarketSummaryCard(String market, int tradeAmount, int netAmount) {
+    final isPositive = netAmount > 0;
+
+    return Card(
+      color: isPositive
+          ? Colors.red[50]
+          : netAmount < 0
+              ? Colors.blue[50]
+              : null,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              market,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // 순매수/매도 금액
+            Text(
+              Provider.of<ForeignInvestorProvider>(context, listen: false)
+                  .formatAmount(netAmount),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isPositive
+                    ? Colors.red
+                    : netAmount < 0
+                        ? Colors.blue
+                        : Colors.grey,
+              ),
+            ),
+            Text(
+              isPositive ? '순매수' : '순매도',
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+            const SizedBox(height: 4),
+            // 거래금액
+            Text(
+              '거래금액: ${Provider.of<ForeignInvestorProvider>(context, listen: false).formatAmount(tradeAmount)}',
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 기존 _buildMarketCard는 호환성을 위해 유지 (deprecated)
   Widget _buildMarketCard(String market, List<dynamic> summaryList) {
     if (summaryList.isEmpty) {
       return Card(

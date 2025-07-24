@@ -44,15 +44,36 @@ class ForeignInvestorProvider with ChangeNotifier {
   DateTime? get customToDate => _customToDate;
   String? get actualDataDate => _actualDataDate;
   
-  // 최근 총 외국인 순매수 금액 (KOSPI + KOSDAQ)
+  // 선택된 기간 동안의 총 외국인 순매수 금액 (KOSPI + KOSDAQ 합계)
   int get totalForeignNetAmount {
     if (_dailySummary.isEmpty) return 0;
     
-    // 가장 최근 날짜의 데이터 합계
-    final latestDate = _dailySummary.first.date;
+    // 선택된 기간의 모든 데이터 합계
     return _dailySummary
-        .where((summary) => summary.date == latestDate)
         .fold<int>(0, (sum, summary) => sum + summary.totalForeignNetAmount);
+  }
+  
+  // KOSPI 선택된 기간 동안의 거래금액 합계
+  int get kospiTotalTradeAmount {
+    if (_dailySummary.isEmpty) return 0;
+    
+    return _dailySummary
+        .where((summary) => summary.marketType == 'KOSPI')
+        .fold<int>(0, (sum, summary) => sum + summary.foreignTotalTradeAmount);
+  }
+  
+  // KOSDAQ 선택된 기간 동안의 거래금액 합계
+  int get kosdaqTotalTradeAmount {
+    if (_dailySummary.isEmpty) return 0;
+    
+    return _dailySummary
+        .where((summary) => summary.marketType == 'KOSDAQ')
+        .fold<int>(0, (sum, summary) => sum + summary.foreignTotalTradeAmount);
+  }
+  
+  // 선택된 기간 동안의 총 거래금액 (KOSPI + KOSDAQ)
+  int get totalTradeAmount {
+    return kospiTotalTradeAmount + kosdaqTotalTradeAmount;
   }
   
   // 외국인 매수/매도 우세 여부
@@ -250,7 +271,7 @@ class ForeignInvestorProvider with ChangeNotifier {
     }
   }
   
-  // 상위 종목 데이터 로드
+  // 상위 종목 데이터 로드 (선택된 기간 기준)
   Future<void> loadTopStocks() async {
     try {
       String? marketFilter;
@@ -258,14 +279,33 @@ class ForeignInvestorProvider with ChangeNotifier {
         marketFilter = _selectedMarket;
       }
       
-      // 병렬로 상위 매수/매도 종목 조회
+      // 선택된 기간 정보 가져오기
+      final dateRange = getCurrentDateRange();
+      final fromDate = dateRange['fromDate']!.replaceAll('.', '');
+      final toDate = dateRange['toDate']!.replaceAll('.', '');
+      
+      print('🔍 상위 종목 조회: ${fromDate} ~ ${toDate}, 시장: ${marketFilter ?? 'ALL'}');
+      
+      // 기간별 상위 매수/매도 종목 조회
       final futures = await Future.wait([
-        _service.getTopForeignStocks(marketType: marketFilter, limit: 10),
-        _service.getTopForeignSellStocks(marketType: marketFilter, limit: 10),
+        _service.getTopForeignStocksByDateRange(
+          fromDate: fromDate,
+          toDate: toDate,
+          marketType: marketFilter, 
+          limit: 10
+        ),
+        _service.getTopForeignSellStocksByDateRange(
+          fromDate: fromDate,
+          toDate: toDate,
+          marketType: marketFilter, 
+          limit: 10
+        ),
       ]);
       
       _topBuyStocks = futures[0];
       _topSellStocks = futures[1];
+      
+      print('📊 상위 종목 조회 완료: 매수 ${_topBuyStocks.length}개, 매도 ${_topSellStocks.length}개');
       
     } catch (e) {
       _setError('상위 종목 데이터 로드 실패: $e');
