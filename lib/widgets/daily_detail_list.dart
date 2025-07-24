@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/foreign_investor_data.dart';
+import '../providers/foreign_investor_provider.dart';
 
-class DailyDetailList extends StatelessWidget {
+class DailyDetailList extends StatefulWidget {
   final List<DailyForeignSummary> dailyData;
   final String selectedMarket;
 
@@ -12,8 +14,83 @@ class DailyDetailList extends StatelessWidget {
   });
 
   @override
+  State<DailyDetailList> createState() => _DailyDetailListState();
+}
+
+class _DailyDetailListState extends State<DailyDetailList> {
+  final ScrollController _scrollController = ScrollController();
+  List<DailyForeignSummary> _displayData = [];
+  bool _isLoadingMore = false;
+  bool _hasMoreData = true;
+  static const int _pageSize = 7; // 한 번에 로드할 데이터 수
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeData();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(DailyDetailList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dailyData != widget.dailyData || 
+        oldWidget.selectedMarket != widget.selectedMarket) {
+      _initializeData();
+    }
+  }
+
+  void _initializeData() {
+    setState(() {
+      _displayData = widget.dailyData.take(_pageSize).toList();
+      _hasMoreData = widget.dailyData.length > _pageSize;
+    });
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= 
+        _scrollController.position.maxScrollExtent - 100) {
+      _loadMoreData();
+    }
+  }
+
+  Future<void> _loadMoreData() async {
+    if (_isLoadingMore || !_hasMoreData) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    // 백그라운드에서 추가 데이터 로드
+    final provider = Provider.of<ForeignInvestorProvider>(context, listen: false);
+    await provider.loadMoreHistoricalData();
+
+    // 시뮬레이션: 네트워크 지연
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    setState(() {
+      final currentLength = _displayData.length;
+      final moreData = widget.dailyData
+          .skip(currentLength)
+          .take(_pageSize)
+          .toList();
+      
+      _displayData.addAll(moreData);
+      _hasMoreData = currentLength + moreData.length < widget.dailyData.length;
+      _isLoadingMore = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (dailyData.isEmpty) {
+    if (_displayData.isEmpty) {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(32),
@@ -53,7 +130,7 @@ class DailyDetailList extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '일별 상세 데이터 (최근 1주일)',
+                  '일별 상세 데이터',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -62,7 +139,7 @@ class DailyDetailList extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '${dailyData.length}일',
+                  '${_displayData.length}/${widget.dailyData.length}일',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey.shade600,
@@ -137,7 +214,7 @@ class DailyDetailList extends StatelessWidget {
           // 데이터 리스트 (스크롤 가능)
           SizedBox(
             height: 280, // 고정 높이
-            child: dailyData.isEmpty 
+            child: _displayData.isEmpty 
                 ? const Center(
                     child: Padding(
                       padding: EdgeInsets.all(32),
@@ -151,15 +228,50 @@ class DailyDetailList extends StatelessWidget {
                     ),
                   )
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: EdgeInsets.zero,
-                    itemCount: dailyData.length,
+                    itemCount: _displayData.length + (_hasMoreData ? 1 : 0),
                     itemBuilder: (context, index) {
-                      final data = dailyData[index];
-                      return _buildDataRow(data, index);
+                      if (index < _displayData.length) {
+                        final data = _displayData[index];
+                        return _buildDataRow(data, index);
+                      } else {
+                        // 로딩 인디케이터
+                        return _buildLoadingIndicator();
+                      }
                     },
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '추가 데이터 로딩 중...',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

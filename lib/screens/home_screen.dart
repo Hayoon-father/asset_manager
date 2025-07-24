@@ -243,9 +243,9 @@ class _HomeScreenState extends State<HomeScreen>
           
           const SizedBox(height: 16),
           
-          // 일별 상세 데이터 (최근 1주일, 스크롤 가능)
+          // 일별 상세 데이터
           DailyDetailList(
-            dailyData: provider.getWeeklySummaryForChart(),
+            dailyData: provider.getExtendedWeeklySummaryForChart(),
             selectedMarket: provider.selectedMarket,
           ),
         ],

@@ -17,8 +17,12 @@ class ForeignInvestorProvider with ChangeNotifier {
   List<ForeignInvestorData> _latestData = [];
   List<DailyForeignSummary> _dailySummary = [];
   List<DailyForeignSummary> _chartDailySummary = []; // 차트용 고정 1개월 데이터
+  List<DailyForeignSummary> _historicalDailySummary = []; // 과거 데이터 캐시 (3개월~1년)
   List<ForeignInvestorData> _topBuyStocks = [];
   List<ForeignInvestorData> _topSellStocks = [];
+  
+  // 백그라운드 캐싱 상태
+  bool _isCachingHistoricalData = false;
   
   String _selectedMarket = 'ALL'; // ALL, KOSPI, KOSDAQ
   String _selectedDateRange = '1D'; // 1D, 7D, 30D, 3M
@@ -36,8 +40,10 @@ class ForeignInvestorProvider with ChangeNotifier {
   List<ForeignInvestorData> get latestData => _latestData;
   List<DailyForeignSummary> get dailySummary => _dailySummary;
   List<DailyForeignSummary> get chartDailySummary => _chartDailySummary; // 차트용 데이터
+  List<DailyForeignSummary> get historicalDailySummary => _historicalDailySummary;
   List<ForeignInvestorData> get topBuyStocks => _topBuyStocks;
   List<ForeignInvestorData> get topSellStocks => _topSellStocks;
+  bool get isCachingHistoricalData => _isCachingHistoricalData;
   String get selectedMarket => _selectedMarket;
   String get selectedDateRange => _selectedDateRange;
   DateTime? get customFromDate => _customFromDate;
@@ -109,6 +115,10 @@ class ForeignInvestorProvider with ChangeNotifier {
       print('차트용 일별 데이터 개수: ${_chartDailySummary.length}');
       print('상위 매수 종목 개수: ${_topBuyStocks.length}');
       print('상위 매도 종목 개수: ${_topSellStocks.length}');
+      
+      // 3단계: 백그라운드에서 과거 데이터 캐싱 시작
+      print('🗄️ 백그라운드 과거 데이터 캐싱 시작...');
+      _startHistoricalDataCaching();
     } catch (e) {
       _setError('초기 데이터 로드 실패: $e');
       print('=== 초기 데이터 로드 실패 ===');
@@ -681,6 +691,156 @@ class ForeignInvestorProvider with ChangeNotifier {
     return getForeignTrendData();
   }
   
+  // 백그라운드에서 과거 데이터 캐싱 시작
+  Future<void> _startHistoricalDataCaching() async {
+    if (_isCachingHistoricalData) return;
+    
+    _isCachingHistoricalData = true;
+    
+    try {
+      // 3개월~1년 과거 데이터를 점진적으로 캐싱
+      final endDate = ForeignInvestorService.getDaysAgoString(90); // 3개월 전부터
+      final startDate = ForeignInvestorService.getDaysAgoString(365); // 1년 전까지
+      
+      print('📦 과거 데이터 캐싱: ${startDate} ~ ${endDate}');
+      
+      // 백그라운드에서 실행 (UI 블로킹 방지)
+      Future.microtask(() async {
+        try {
+          _historicalDailySummary = await _service.getDailyForeignSummary(
+            startDate: startDate,
+            endDate: endDate,
+            marketType: 'ALL', // 전체 시장 데이터
+            limit: 365, // 1년치
+          );
+          
+          print('✅ 과거 데이터 캐싱 완료: ${_historicalDailySummary.length}개');
+        } catch (e) {
+          print('⚠️ 과거 데이터 캐싱 실패: $e');
+        } finally {
+          _isCachingHistoricalData = false;
+          notifyListeners();
+        }
+      });
+      
+    } catch (e) {
+      print('⚠️ 과거 데이터 캐싱 시작 실패: $e');
+      _isCachingHistoricalData = false;
+    }
+  }
+
+  // 더 많은 과거 데이터 로드 (무한 스크롤용)
+  Future<void> loadMoreHistoricalData() async {
+    if (_isCachingHistoricalData) {
+      // 캐싱이 진행 중이면 완료까지 대기
+      while (_isCachingHistoricalData) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    
+    // 캐시된 데이터가 있으면 그것을 사용하고, 없으면 실시간 로드
+    if (_historicalDailySummary.isNotEmpty) {
+      print('📦 캐시된 과거 데이터 사용: ${_historicalDailySummary.length}개');
+      return;
+    }
+    
+    try {
+      // 실시간으로 추가 데이터 로드
+      final moreStartDate = ForeignInvestorService.getDaysAgoString(60);
+      final moreEndDate = ForeignInvestorService.getDaysAgoString(30);
+      
+      print('🔄 추가 과거 데이터 로드: ${moreStartDate} ~ ${moreEndDate}');
+      
+      final moreData = await _service.getDailyForeignSummary(
+        startDate: moreStartDate,
+        endDate: moreEndDate,
+        marketType: _selectedMarket != 'ALL' ? _selectedMarket : null,
+        limit: 30,
+      );
+      
+      // 기존 데이터와 병합 (중복 제거)
+      final combinedData = [..._dailySummary, ...moreData];
+      final uniqueData = <String, DailyForeignSummary>{};
+      
+      for (final data in combinedData) {
+        final key = '${data.date}_${data.marketType}';
+        uniqueData[key] = data;
+      }
+      
+      _historicalDailySummary = uniqueData.values.toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
+      
+      print('✅ 추가 과거 데이터 로드 완료: ${moreData.length}개');
+      
+    } catch (e) {
+      print('⚠️ 추가 과거 데이터 로드 실패: $e');
+    }
+  }
+
+  // 확장된 주간 요약 데이터 (캐시 포함)
+  List<DailyForeignSummary> getExtendedWeeklySummaryForChart() {
+    // 현재 데이터 + 캐시된 과거 데이터 병합
+    final allData = <String, DailyForeignSummary>{};
+    
+    // 현재 데이터 추가
+    for (final summary in _chartDailySummary) {
+      final key = '${summary.date}_${summary.marketType}';
+      allData[key] = summary;
+    }
+    
+    // 캐시된 과거 데이터 추가
+    for (final summary in _historicalDailySummary) {
+      final key = '${summary.date}_${summary.marketType}';
+      if (!allData.containsKey(key)) {
+        allData[key] = summary;
+      }
+    }
+    
+    // 날짜별로 그룹화하여 전체 시장 기준 데이터 생성
+    final Map<String, List<DailyForeignSummary>> groupedByDate = {};
+    
+    for (final summary in allData.values) {
+      final date = summary.date;
+      if (!groupedByDate.containsKey(date)) {
+        groupedByDate[date] = [];
+      }
+      groupedByDate[date]!.add(summary);
+    }
+    
+    // 날짜별로 KOSPI + KOSDAQ 합계를 계산하여 1개의 DailyForeignSummary 생성
+    final extendedData = <DailyForeignSummary>[];
+    
+    for (final entry in groupedByDate.entries) {
+      final date = entry.key;
+      final summaries = entry.value;
+      
+      int totalNetAmount = 0;
+      int totalBuyAmount = 0;
+      int totalSellAmount = 0;
+      
+      for (final summary in summaries) {
+        totalNetAmount += summary.totalForeignNetAmount;
+        totalBuyAmount += summary.foreignBuyAmount;
+        totalSellAmount += summary.foreignSellAmount;
+      }
+      
+      // 합계 데이터로 새로운 DailyForeignSummary 생성
+      extendedData.add(DailyForeignSummary(
+        date: date,
+        marketType: 'ALL', // 전체 시장
+        foreignNetAmount: totalNetAmount,
+        otherForeignNetAmount: 0,
+        totalForeignNetAmount: totalNetAmount,
+        foreignBuyAmount: totalBuyAmount,
+        foreignSellAmount: totalSellAmount,
+      ));
+    }
+    
+    // 최신순 정렬
+    extendedData.sort((a, b) => b.date.compareTo(a.date));
+    return extendedData;
+  }
+
   @override
   void dispose() {
     _service.dispose();
