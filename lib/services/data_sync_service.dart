@@ -6,7 +6,6 @@ import 'foreign_investor_service.dart';
 
 class DataSyncService {
   final PykrxDataService _pykrxService = PykrxDataService();
-  final ForeignInvestorService _dbService = ForeignInvestorService();
   
   // 싱글톤 패턴
   static final DataSyncService _instance = DataSyncService._internal();

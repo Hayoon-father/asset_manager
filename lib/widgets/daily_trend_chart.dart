@@ -108,16 +108,22 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
           }
         });
       },
-      child: ClipRect(
+      child: Container(
+        width: double.infinity,
+        height: 300,
+        clipBehavior: Clip.hardEdge,
+        decoration: const BoxDecoration(),
         child: Stack(
+          clipBehavior: Clip.hardEdge,
           children: [
             // 차트 영역
-            CustomPaint(
-              size: const Size(double.infinity, 300),
-              painter: _StockStyleChartPainter(
-                data: widget.summaryData,
-                scale: _scale,
-                panX: _panX,
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _StockStyleChartPainter(
+                  data: widget.summaryData,
+                  scale: _scale,
+                  panX: _panX,
+                ),
               ),
             ),
             // Y축 라벨 (왼쪽)
@@ -126,7 +132,11 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
               top: 0,
               bottom: 30,
               width: 80,
-              child: _buildYAxisLabels(),
+              child: Container(
+                clipBehavior: Clip.hardEdge,
+                decoration: const BoxDecoration(),
+                child: _buildYAxisLabels(),
+              ),
             ),
             // X축 라벨 (하단)
             Positioned(
@@ -134,7 +144,11 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
               right: 0,
               bottom: 0,
               height: 30,
-              child: _buildXAxisLabels(),
+              child: Container(
+                clipBehavior: Clip.hardEdge,
+                decoration: const BoxDecoration(),
+                child: _buildXAxisLabels(),
+              ),
             ),
           ],
         ),
@@ -152,39 +166,61 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
     final steps = 6;
     final stepValue = (maxValue - minValue) / steps;
     
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: List.generate(steps + 1, (index) {
-        final value = maxValue - (stepValue * index);
-        final displayValue = (value / 1000000000000).toStringAsFixed(1); // 1조원 단위
-        return Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: Text(
-            '${displayValue}조',
-            style: const TextStyle(fontSize: 10, color: Colors.grey),
-          ),
-        );
-      }),
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: SizedBox(
+        height: 270, // 30픽셀 여유 공간 제공
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(steps + 1, (index) {
+            final value = maxValue - (stepValue * index);
+            final displayValue = (value / 1000000000000).toStringAsFixed(1); // 1조원 단위
+            return Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                '${displayValue}조',
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
+          }),
+        ),
+      ),
     );
   }
 
   Widget _buildXAxisLabels() {
+    if (widget.summaryData.isEmpty) return const SizedBox();
+    
     final visibleDataCount = (widget.summaryData.length / _scale).round().clamp(3, widget.summaryData.length);
     final step = (widget.summaryData.length / visibleDataCount).round().clamp(1, widget.summaryData.length);
     
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: List.generate(visibleDataCount, (index) {
-        final dataIndex = (index * step).clamp(0, widget.summaryData.length - 1);
-        final date = widget.summaryData[dataIndex].date;
-        final displayDate = '${date.substring(4, 6)}/${date.substring(6, 8)}';
-        
-        return Text(
-          displayDate,
-          style: const TextStyle(fontSize: 10, color: Colors.grey),
-        );
-      }),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width - 96, // 여유 공간 제공
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(visibleDataCount, (index) {
+            final dataIndex = (index * step).clamp(0, widget.summaryData.length - 1);
+            final date = widget.summaryData[dataIndex].date;
+            final displayDate = date.length >= 8 
+                ? '${date.substring(4, 6)}/${date.substring(6, 8)}'
+                : date;
+            
+            return Flexible(
+              child: Text(
+                displayDate,
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            );
+          }),
+        ),
+      ),
     );
   }
 }
@@ -204,11 +240,19 @@ class _StockStyleChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty || size.width <= 0 || size.height <= 0) return;
 
+    // 안전한 크기 확인
+    final safeWidth = size.width.clamp(80.0, double.infinity);
+    final safeHeight = size.height.clamp(30.0, double.infinity);
+    
     // 차트 영역 (Y축 라벨과 X축 라벨 공간 제외)
-    final chartArea = Rect.fromLTWH(80, 0, size.width - 80, size.height - 30);
+    final chartArea = Rect.fromLTWH(
+      80, 
+      0, 
+      (safeWidth - 80).clamp(1.0, double.infinity), 
+      (safeHeight - 30).clamp(1.0, double.infinity)
+    );
     
     // 페인트 설정
-
     final gridPaint = Paint()
       ..color = Colors.grey.withOpacity(0.3)
       ..strokeWidth = 0.5;
@@ -217,8 +261,9 @@ class _StockStyleChartPainter extends CustomPainter {
       ..color = Colors.grey.withOpacity(0.8)
       ..strokeWidth = 1.0;
 
-    // 클리핑 적용
-    canvas.clipRect(chartArea);
+    // 안전한 클리핑 적용
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, 0, safeWidth, safeHeight));
 
     // 누적 보유액 데이터로 최대/최소값 계산
     final values = data.map((d) => d.cumulativeHoldings).toList();
@@ -348,6 +393,9 @@ class _StockStyleChartPainter extends CustomPainter {
           ..style = PaintingStyle.stroke);
       }
     }
+    
+    // Canvas 복원
+    canvas.restore();
   }
 
   @override
