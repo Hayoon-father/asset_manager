@@ -512,7 +512,7 @@ class _HomeScreenState extends State<HomeScreen>
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '해당 $displayDate 기준의 데이터입니다',
+                provider.priorityMessage ?? '현재 $displayDate가 최신 정보입니다',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.amber.shade700,

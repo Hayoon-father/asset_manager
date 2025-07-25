@@ -2,16 +2,24 @@ import 'package:flutter/foundation.dart';
 import '../models/foreign_investor_data.dart';
 import '../services/foreign_investor_service.dart';
 import '../services/data_sync_service.dart';
+import '../services/offline_service.dart';
+import '../services/priority_data_service.dart';
 
 class ForeignInvestorProvider with ChangeNotifier {
   final ForeignInvestorService _service = ForeignInvestorService();
   final DataSyncService _syncService = DataSyncService();
+  final OfflineService _offlineService = OfflineService();
+  final PriorityDataService _priorityService = PriorityDataService();
   
   // 상태 변수들
   bool _isLoading = false;
   String? _errorMessage;
   bool _isDataSyncing = false;
   String? _syncMessage;
+  
+  // 우선순위 서비스 관련 상태
+  DataSource _currentDataSource = DataSource.none;
+  String? _priorityMessage;
   
   // 데이터 변수들
   List<ForeignInvestorData> _latestData = [];
@@ -51,6 +59,10 @@ class ForeignInvestorProvider with ChangeNotifier {
   DateTime? get customToDate => _customToDate;
   String? get actualDataDate => _actualDataDate;
   
+  // 우선순위 서비스 관련 Getters
+  DataSource get currentDataSource => _currentDataSource;
+  String? get priorityMessage => _priorityMessage;
+  
   // 선택된 기간 동안의 총 외국인 순매수 금액 (KOSPI + KOSDAQ 합계)
   int get totalForeignNetAmount {
     if (_dailySummary.isEmpty) return 0;
@@ -87,8 +99,40 @@ class ForeignInvestorProvider with ChangeNotifier {
   bool get isForeignBuyDominant => totalForeignNetAmount > 0;
   
   ForeignInvestorProvider() {
+    _initializeServices();
     _initializeData();
     _startRealtimeSubscription();
+  }
+  
+  // 서비스 초기화
+  Future<void> _initializeServices() async {
+    await _offlineService.initialize();
+    
+    // 네트워크 상태 변화 모니터링
+    _offlineService.networkStatusStream.listen((isOnline) {
+      if (isOnline) {
+        _performDataSyncInBackground(); // 온라인 복구 시 자동 동기화
+      }
+    });
+    
+    // 우선순위 서비스 동기화 상태 모니터링
+    _priorityService.syncStatusStream.listen((status) {
+      switch (status) {
+        case DataSyncStatus.syncing:
+          _priorityMessage = '백그라운드 동기화 중...';
+          break;
+        case DataSyncStatus.completed:
+          _priorityMessage = '동기화 완료';
+          break;
+        case DataSyncStatus.failed:
+          _priorityMessage = '동기화 실패';
+          break;
+        case DataSyncStatus.idle:
+          _priorityMessage = null;
+          break;
+      }
+      notifyListeners();
+    });
   }
   
   // 초기 데이터 로드
@@ -199,7 +243,7 @@ class ForeignInvestorProvider with ChangeNotifier {
     );
   }
   
-  // 최신 데이터 로드
+  // 최신 데이터 로드 (우선순위 로직 적용)
   Future<void> loadLatestData() async {
     try {
       String? marketFilter;
@@ -207,13 +251,46 @@ class ForeignInvestorProvider with ChangeNotifier {
         marketFilter = _selectedMarket;
       }
       
-      _latestData = await _service.getLatestForeignInvestorData(
+      // 우선순위 데이터 서비스 사용
+      final result = await _priorityService.loadLatestDataWithPriority(
         marketType: marketFilter,
         limit: 50,
       );
       
+      if (result.success) {
+        _latestData = result.data;
+        _currentDataSource = result.source;
+        _priorityMessage = result.message;
+        
+        // actualDataDate 업데이트 (화면 표시용)
+        if (result.latestDate != null) {
+          _actualDataDate = result.latestDate;
+        }
+        
+        // 데이터 소스에 따른 추가 처리
+        switch (result.source) {
+          case DataSource.api:
+            print('✅ API에서 최신 데이터 로드됨');
+            break;
+          case DataSource.database:
+            print('🗄️ DB에서 데이터 로드됨 (API 실패)');
+            break;
+          case DataSource.cache:
+            print('💾 캐시에서 데이터 로드됨');
+            break;
+          case DataSource.none:
+            print('❌ 데이터 없음');
+            break;
+        }
+        
+      } else {
+        _setError(result.message);
+        _currentDataSource = DataSource.none;
+      }
+      
     } catch (e) {
-      _setError('최신 데이터 로드 실패: $e');
+      _setError('데이터 로드 실패: $e');
+      _currentDataSource = DataSource.none;
     }
   }
   
@@ -984,6 +1061,8 @@ class ForeignInvestorProvider with ChangeNotifier {
   @override
   void dispose() {
     _service.dispose();
+    _offlineService.dispose();
+    _priorityService.dispose();
     super.dispose();
   }
 }

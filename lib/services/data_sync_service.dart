@@ -135,12 +135,12 @@ class DataSyncService {
   // 최신 데이터 동기화 (앱 초기화 시 호출) - 개선된 버전
   Future<DataSyncResult> syncLatestData() async {
     try {
-      // 1. pykrx API 서버 상태 확인
-      final isApiHealthy = await _pykrxService.checkApiHealth();
+      // 1. pykrx API 서버 상태 확인 (재시도 로직 적용)
+      final isApiHealthy = await _pykrxService.checkServerWithRetry(maxRetries: 3);
       if (!isApiHealthy) {
         return DataSyncResult(
           success: false,
-          message: 'pykrx API 서버 연결 실패',
+          message: 'pykrx API 서버 연결 실패 (3회 재시도 후)',
           newDataCount: 0,
         );
       }

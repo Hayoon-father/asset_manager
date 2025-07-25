@@ -45,8 +45,9 @@ dependencies:
   # 날짜/시간 처리
   intl: ^0.19.0
   
-  # 로컬 저장소
+  # 로컬 저장소 및 네트워크
   shared_preferences: ^2.3.2
+  connectivity_plus: ^6.0.5
 
 dev_dependencies:
   flutter_test:

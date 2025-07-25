@@ -3,11 +3,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/foreign_investor_data.dart';
 import 'package:intl/intl.dart';
+import 'cache_service.dart';
 
 class ForeignInvestorService {
   static const String tableName = 'foreign_investor_data';
   
   final SupabaseClient _client = SupabaseConfig.client;
+  final CacheService _cacheService = CacheService();
   
   // 스트림 컨트롤러 (실시간 데이터 업데이트용)
   final StreamController<List<ForeignInvestorData>> _dataStreamController = 
@@ -15,14 +17,24 @@ class ForeignInvestorService {
   
   Stream<List<ForeignInvestorData>> get dataStream => _dataStreamController.stream;
 
-  // 최근 외국인 수급 데이터 조회 (실제 DB 연결)
+  // 최근 외국인 수급 데이터 조회 (캐시 우선)
   Future<List<ForeignInvestorData>> getLatestForeignInvestorData({
     String? marketType,
     int limit = 50,
   }) async {
     try {
+      // 1. 캐시에서 먼저 시도
+      final cachedData = await _cacheService.getCachedData(
+        'latest',
+        market: marketType,
+      );
       
-      // 전체 데이터 조회
+      if (cachedData != null && cachedData.isNotEmpty) {
+        print('캐시에서 최신 데이터 반환: ${cachedData.length}개');
+        return cachedData.take(limit).toList();
+      }
+      
+      // 2. 캐시에 없으면 DB에서 조회
       final response = await _client
           .from(tableName)
           .select('*')
@@ -47,10 +59,20 @@ class ForeignInvestorService {
       // 제한 개수만큼 잘라내기
       final result = allData.take(limit).toList();
       
+      // 3. 결과를 캐시에 저장
+      if (result.isNotEmpty) {
+        await _cacheService.setCachedData('latest', result, market: marketType);
+      }
+      
       return result;
           
     } catch (e) {
-      return [];
+      // 4. 오류 시 캐시에서 마지막 시도
+      final fallbackCache = await _cacheService.getCachedData(
+        'latest',
+        market: marketType,
+      );
+      return fallbackCache?.take(limit).toList() ?? [];
     }
   }
 
