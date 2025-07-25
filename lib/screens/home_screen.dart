@@ -7,6 +7,7 @@ import '../widgets/top_stocks_list.dart';
 import '../widgets/advanced_daily_trend_chart.dart';
 import '../widgets/daily_detail_list.dart';
 import '../widgets/filter_chips.dart';
+import '../widgets/sync_status_widget.dart';
 import '../services/foreign_investor_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -48,6 +49,12 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // 데이터 동기화 상태 위젯
+          const Padding(
+            padding: EdgeInsets.only(right: 8.0),
+            child: SimpleSyncStatusWidget(),
+          ),
+          // 수동 새로고침 버튼
           Consumer<ForeignInvestorProvider>(
             builder: (context, provider, _) {
               return IconButton(
@@ -62,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen>
                       )
                     : const Icon(Icons.refresh),
                 onPressed: provider.isLoading ? null : () => provider.refresh(),
-                tooltip: '새로고침',
+                tooltip: 'UI 새로고침',
               );
             },
           ),

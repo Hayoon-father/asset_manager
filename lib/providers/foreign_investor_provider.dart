@@ -117,7 +117,7 @@ class ForeignInvestorProvider with ChangeNotifier {
     }
   }
 
-  // 백그라운드에서 데이터 동기화 수행
+  // 백그라운드에서 데이터 동기화 수행 (개선된 버전)
   Future<void> _performDataSyncInBackground() async {
     _isDataSyncing = true;
     _syncMessage = 'pykrx API에서 최신 데이터 확인 중...';
@@ -126,22 +126,43 @@ class ForeignInvestorProvider with ChangeNotifier {
     try {
       final syncResult = await _syncService.syncLatestData();
       
-      if (syncResult.success && syncResult.newDataCount > 0) {
-        _syncMessage = '${syncResult.newDataCount}개의 새로운 데이터가 추가되었습니다';
+      if (syncResult.isSuccessfulSync) {
+        // 새로운 데이터가 성공적으로 동기화됨
+        _syncMessage = '🎉 ${syncResult.newDataCount}개 새 데이터 동기화 완료';
         
-        // 새로운 데이터가 있으면 UI 다시 로드
+        // UI 즉시 업데이트
         await _refreshAllDataSilently();
+        
+      } else if (syncResult.hasLatestData) {
+        // 이미 최신 데이터 보유 중
+        _syncMessage = '✅ 이미 최신 데이터 보유 중';
+        
+      } else if (syncResult.success) {
+        // 성공했지만 새 데이터 없음
+        _syncMessage = '📊 ${syncResult.message}';
+        
       } else {
-        _syncMessage = syncResult.message;
+        // 동기화 실패
+        _syncMessage = '⚠️ ${syncResult.message}';
       }
+      
+      // 동기화 결과를 로그로 기록
+      if (kDebugMode) {
+        // 디버그 모드에서만 로그 출력
+      }
+      
     } catch (e) {
-      _syncMessage = 'pykrx API 연결 실패 - 기존 데이터 사용';
+      _syncMessage = '❌ pykrx API 연결 실패 - 기존 데이터 사용';
     } finally {
       _isDataSyncing = false;
       notifyListeners();
       
-      // 5초 후 동기화 메시지 숨김
-      Future.delayed(const Duration(seconds: 5), () {
+      // 상황에 따라 메시지 표시 시간 조절
+      final displayDuration = _syncMessage?.contains('실패') == true 
+          ? const Duration(seconds: 8)  // 실패 시 더 오래 표시
+          : const Duration(seconds: 5);
+          
+      Future.delayed(displayDuration, () {
         _syncMessage = null;
         notifyListeners();
       });
