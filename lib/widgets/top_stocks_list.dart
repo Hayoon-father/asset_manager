@@ -29,18 +29,24 @@ class TopStocksList extends StatelessWidget {
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Text(
                   '${stocks.length}개',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.grey[600],
                       ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ],
             ),
@@ -72,7 +78,7 @@ class TopStocksList extends StatelessWidget {
   Widget _buildStockTile(BuildContext context, ForeignInvestorData stock, int rank) {
     final rankColor = _getRankColor(rank);
     
-    return Container(
+    return SizedBox(
       height: 72, // 명시적인 높이 설정
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
@@ -101,14 +107,20 @@ class TopStocksList extends StatelessWidget {
           fontWeight: FontWeight.w500,
           fontSize: 14,
         ),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
       ),
       subtitle: Row(
         children: [
-          Text(
-            stock.ticker ?? '',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
+          Expanded(
+            child: Text(
+              stock.ticker ?? '',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
           const SizedBox(width: 8),
@@ -128,6 +140,8 @@ class TopStocksList extends StatelessWidget {
                     ? Colors.blue[800] 
                     : Colors.orange[800],
               ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
         ],

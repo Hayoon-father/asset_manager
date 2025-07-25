@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/foreign_investor_data.dart';
@@ -22,7 +21,6 @@ class ForeignInvestorService {
     int limit = 50,
   }) async {
     try {
-      print('🔍 실제 DB에서 최신 외국인 수급 데이터 조회 시작');
       
       // 쿼리 빌더 시작
       var query = _client
@@ -40,10 +38,8 @@ class ForeignInvestorService {
       query = query.limit(limit);
       
       final response = await query;
-      print('📊 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 조회된 데이터가 없습니다.');
         return [];
       }
       
@@ -51,11 +47,9 @@ class ForeignInvestorService {
           .map<ForeignInvestorData>((json) => ForeignInvestorData.fromJson(json))
           .toList();
       
-      print('✅ 실제 데이터 ${result.length}개 반환');
       return result;
           
     } catch (e) {
-      print('외국인 수급 데이터 조회 실패: $e');
       return [];
     }
   }
@@ -68,7 +62,6 @@ class ForeignInvestorService {
     int limit = 30,
   }) async {
     try {
-      print('🔍 실제 DB에서 일별 외국인 수급 요약 조회 시작');
       
       // 기본 날짜 설정
       final String actualEndDate = endDate ?? DateFormat('yyyyMMdd').format(DateTime.now());
@@ -91,10 +84,8 @@ class ForeignInvestorService {
       }
       
       final response = await query;
-      print('📊 일별 요약 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 일별 요약 데이터가 없습니다.');
         return [];
       }
       
@@ -160,11 +151,9 @@ class ForeignInvestorService {
       // 날짜순 정렬 (최신순)
       result.sort((a, b) => b.date.compareTo(a.date));
       
-      print('✅ 일별 요약 데이터 ${result.length}개 반환');
       return result.take(limit).toList();
       
     } catch (e) {
-      print('일별 외국인 수급 요약 조회 실패: $e');
       return [];
     }
   }
@@ -176,7 +165,6 @@ class ForeignInvestorService {
     int limit = 20,
   }) async {
     try {
-      print('🔍 실제 DB에서 외국인 순매수 상위 종목 조회 시작');
       
       // 기본 날짜 설정 (최근 5일 내)
       final String queryDate = date ?? DateFormat('yyyyMMdd').format(DateTime.now());
@@ -203,10 +191,8 @@ class ForeignInvestorService {
       query = query.limit(limit);
       
       final response = await query;
-      print('📊 상위 종목 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 상위 종목 데이터가 없습니다.');
         return [];
       }
       
@@ -214,11 +200,9 @@ class ForeignInvestorService {
           .map<ForeignInvestorData>((json) => ForeignInvestorData.fromJson(json))
           .toList();
       
-      print('✅ 상위 종목 데이터 ${result.length}개 반환');
       return result;
       
     } catch (e) {
-      print('외국인 순매수 상위 종목 조회 실패: $e');
       return [];
     }
   }
@@ -230,7 +214,6 @@ class ForeignInvestorService {
     int limit = 20,
   }) async {
     try {
-      print('🔍 실제 DB에서 외국인 순매도 상위 종목 조회 시작');
       
       // 기본 날짜 설정 (최근 5일 내)
       final String queryDate = date ?? DateFormat('yyyyMMdd').format(DateTime.now());
@@ -257,10 +240,8 @@ class ForeignInvestorService {
       query = query.limit(limit);
       
       final response = await query;
-      print('📊 순매도 상위 종목 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 순매도 상위 종목 데이터가 없습니다.');
         return [];
       }
       
@@ -268,18 +249,15 @@ class ForeignInvestorService {
           .map<ForeignInvestorData>((json) => ForeignInvestorData.fromJson(json))
           .toList();
       
-      print('✅ 순매도 상위 종목 데이터 ${result.length}개 반환');
       return result;
       
     } catch (e) {
-      print('외국인 순매도 상위 종목 조회 실패: $e');
       return [];
     }
   }
 
   // 실시간 데이터 구독 시작 (더미 구현)
   void startRealtimeSubscription() {
-    print('실시간 데이터 구독 시작 (더미 구현)');
     // 실제 구현에서는 Supabase realtime을 사용
   }
 

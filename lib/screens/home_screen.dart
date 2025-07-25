@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../providers/foreign_investor_provider.dart';
 import '../widgets/market_summary_card.dart';
 import '../widgets/top_stocks_list.dart';
-import '../widgets/daily_trend_chart.dart';
+import '../widgets/advanced_daily_trend_chart.dart';
 import '../widgets/daily_detail_list.dart';
 import '../widgets/filter_chips.dart';
 import '../services/foreign_investor_service.dart';
@@ -43,6 +43,8 @@ class _HomeScreenState extends State<HomeScreen>
             fontWeight: FontWeight.bold,
             fontSize: 20,
           ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
@@ -67,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: '외국인 수급', icon: Icon(Icons.dashboard)),
             Tab(text: '기관 수급', icon: Icon(Icons.trending_up)),
@@ -236,9 +239,10 @@ class _HomeScreenState extends State<HomeScreen>
           const SizedBox(height: 16),
           
           // 외국인 매매 현황 그래프 (최근 1개월)
-          DailyTrendChart(
+          AdvancedDailyTrendChart(
             summaryData: provider.getForeignHoldingsTrendData(),
-            selectedMarket: 'ALL',
+            selectedMarket: provider.selectedMarket,
+            onRequestMoreData: () => provider.loadMoreHistoricalData(),
           ),
           
           const SizedBox(height: 16),
@@ -318,16 +322,22 @@ class _HomeScreenState extends State<HomeScreen>
                         ? Colors.blue
                         : Colors.grey,
               ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
             Text(
               isPositive ? '순매수' : '순매도',
               style: const TextStyle(fontSize: 11, color: Colors.grey),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
             const SizedBox(height: 4),
             // 거래금액
             Text(
               '거래금액: ${Provider.of<ForeignInvestorProvider>(context, listen: false).formatAmount(tradeAmount)}',
               style: const TextStyle(fontSize: 11, color: Colors.grey),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ],
         ),
@@ -392,6 +402,8 @@ class _HomeScreenState extends State<HomeScreen>
                         ? Colors.blue
                         : Colors.grey,
               ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
             Text(
               isPositive ? '순매수' : '순매도',
@@ -416,6 +428,7 @@ class _HomeScreenState extends State<HomeScreen>
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
             GestureDetector(
               onTap: () => _showDatePicker(context, provider, true),
@@ -426,17 +439,20 @@ class _HomeScreenState extends State<HomeScreen>
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  dateRange['fromDate']!,
+                  dateRange['fromDate'] ?? '날짜 없음',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w600,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
             ),
             Text(
               ' ~ ',
               style: Theme.of(context).textTheme.titleSmall,
+              overflow: TextOverflow.ellipsis,
             ),
             GestureDetector(
               onTap: () => _showDatePicker(context, provider, false),
@@ -447,11 +463,13 @@ class _HomeScreenState extends State<HomeScreen>
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  dateRange['toDate']!,
+                  dateRange['toDate'] ?? '날짜 없음',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w600,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
             ),
@@ -487,12 +505,14 @@ class _HomeScreenState extends State<HomeScreen>
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '해당 ${displayDate} 기준의 데이터입니다',
+                '해당 $displayDate 기준의 데이터입니다',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.amber.shade700,
                   fontWeight: FontWeight.w500,
                 ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ],
@@ -562,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen>
                             value: selectedYear,
                             items: years.map((year) => DropdownMenuItem(
                               value: year,
-                              child: Text('${year}년'),
+                              child: Text('$year년'),
                             )).toList(),
                             onChanged: (value) {
                               if (value != null) {
@@ -585,7 +605,7 @@ class _HomeScreenState extends State<HomeScreen>
                             value: selectedMonth,
                             items: months.map((month) => DropdownMenuItem(
                               value: month,
-                              child: Text('${month}월'),
+                              child: Text('$month월'),
                             )).toList(),
                             onChanged: (value) {
                               if (value != null) {
@@ -608,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen>
                             value: selectedDay,
                             items: days.map((day) => DropdownMenuItem(
                               value: day,
-                              child: Text('${day}일'),
+                              child: Text('$day일'),
                             )).toList(),
                             onChanged: (value) {
                               if (value != null) {
@@ -919,7 +939,7 @@ class _InteractiveChartState extends State<_InteractiveChart> {
   }
 
   Widget _buildYAxisLabels(int minValue, int maxValue) {
-    final steps = 5;
+    const steps = 5;
     final stepValue = (maxValue - minValue) / steps;
     
     return Column(
@@ -931,7 +951,7 @@ class _InteractiveChartState extends State<_InteractiveChart> {
         return Padding(
           padding: const EdgeInsets.only(right: 4),
           child: Text(
-            '${displayValue}조',
+            '$displayValue조',
             style: const TextStyle(fontSize: 10, color: Colors.grey),
           ),
         );

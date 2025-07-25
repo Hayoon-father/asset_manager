@@ -16,7 +16,6 @@ class PykrxDataService {
     List<String>? markets, // ['KOSPI', 'KOSDAQ'] 또는 null(전체)
   }) async {
     try {
-      print('🔍 pykrx API 호출: 최신 외국인 수급 데이터 조회');
       
       final Map<String, dynamic> params = {};
       if (targetDate != null) params['date'] = targetDate;
@@ -27,7 +26,6 @@ class PykrxDataService {
           .join('&');
       
       final url = '$_baseUrl/foreign_investor_data?$queryString';
-      print('📡 API URL: $url');
       
       final response = await http.get(
         Uri.parse(url),
@@ -38,7 +36,6 @@ class PykrxDataService {
         final Map<String, dynamic> jsonData = json.decode(response.body);
         final List<dynamic> dataList = jsonData['data'] ?? [];
         
-        print('✅ pykrx API 응답 성공: ${dataList.length}개 데이터 수신');
         
         return dataList
             .map((item) => ForeignInvestorData.fromPykrxJson(item))
@@ -47,7 +44,6 @@ class PykrxDataService {
         throw Exception('pykrx API 오류: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
-      print('❌ pykrx API 호출 실패: $e');
       rethrow;
     }
   }
@@ -59,7 +55,6 @@ class PykrxDataService {
     List<String>? markets,
   }) async {
     try {
-      print('🔍 pykrx API 호출: 기간별 외국인 수급 데이터 조회 ($fromDate ~ $toDate)');
       
       final Map<String, dynamic> params = {
         'from_date': fromDate,
@@ -72,7 +67,6 @@ class PykrxDataService {
           .join('&');
       
       final url = '$_baseUrl/foreign_investor_data_range?$queryString';
-      print('📡 API URL: $url');
       
       final response = await http.get(
         Uri.parse(url),
@@ -83,7 +77,6 @@ class PykrxDataService {
         final Map<String, dynamic> jsonData = json.decode(response.body);
         final List<dynamic> dataList = jsonData['data'] ?? [];
         
-        print('✅ pykrx API 응답 성공: ${dataList.length}개 데이터 수신');
         
         return dataList
             .map((item) => ForeignInvestorData.fromPykrxJson(item))
@@ -92,7 +85,6 @@ class PykrxDataService {
         throw Exception('pykrx API 오류: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
-      print('❌ pykrx API 호출 실패: $e');
       rethrow;
     }
   }
@@ -100,10 +92,8 @@ class PykrxDataService {
   // 최신 가능한 거래일 조회
   Future<String> getLatestTradingDate() async {
     try {
-      print('🔍 pykrx API 호출: 최신 거래일 조회');
       
-      final url = '$_baseUrl/latest_trading_date';
-      print('📡 API URL: $url');
+      const url = '$_baseUrl/latest_trading_date';
       
       final response = await http.get(
         Uri.parse(url),
@@ -114,13 +104,11 @@ class PykrxDataService {
         final Map<String, dynamic> jsonData = json.decode(response.body);
         final String latestDate = jsonData['latest_date'] ?? '';
         
-        print('✅ 최신 거래일: $latestDate');
         return latestDate;
       } else {
         throw Exception('최신 거래일 조회 실패: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ 최신 거래일 조회 실패: $e');
       rethrow;
     }
   }
@@ -135,7 +123,6 @@ class PykrxDataService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ pykrx API 서버 상태 확인 실패: $e');
       return false;
     }
   }

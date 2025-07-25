@@ -79,8 +79,11 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
               ),
             ),
             const SizedBox(height: 16),
-            SizedBox(
+            Container(
               height: 300,
+              width: double.infinity,
+              clipBehavior: Clip.hardEdge,
+              decoration: const BoxDecoration(),
               child: _buildStockStyleChart(),
             ),
           ],
@@ -163,7 +166,7 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
     final maxValue = values.reduce((a, b) => a > b ? a : b);
     final minValue = values.reduce((a, b) => a < b ? a : b);
     
-    final steps = 6;
+    const steps = 6;
     final stepValue = (maxValue - minValue) / steps;
     
     return SingleChildScrollView(
@@ -179,7 +182,7 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
             return Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Text(
-                '${displayValue}조',
+                '$displayValue조',
                 style: const TextStyle(fontSize: 10, color: Colors.grey),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -200,10 +203,10 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
       scrollDirection: Axis.horizontal,
       physics: const NeverScrollableScrollPhysics(),
       child: SizedBox(
-        width: MediaQuery.of(context).size.width - 96, // 여유 공간 제공
+        width: 280, // Fixed width to prevent overflow
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(visibleDataCount, (index) {
+          children: List.generate(visibleDataCount.clamp(3, 6), (index) {
             final dataIndex = (index * step).clamp(0, widget.summaryData.length - 1);
             final date = widget.summaryData[dataIndex].date;
             final displayDate = date.length >= 8 

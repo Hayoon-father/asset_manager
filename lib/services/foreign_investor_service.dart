@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as Math;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/foreign_investor_data.dart';
@@ -22,7 +21,6 @@ class ForeignInvestorService {
     int limit = 50,
   }) async {
     try {
-      print('🔍 실제 DB에서 최신 외국인 수급 데이터 조회 시작');
       
       // 전체 데이터 조회
       final response = await _client
@@ -31,10 +29,8 @@ class ForeignInvestorService {
           .order('date', ascending: false)
           .order('created_at', ascending: false)
           .limit(limit * 3); // 필터링을 위해 더 많이 조회
-      print('📊 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 조회된 데이터가 없습니다.');
         return [];
       }
       
@@ -51,11 +47,9 @@ class ForeignInvestorService {
       // 제한 개수만큼 잘라내기
       final result = allData.take(limit).toList();
       
-      print('✅ 실제 데이터 ${result.length}개 반환');
       return result;
           
     } catch (e) {
-      print('외국인 수급 데이터 조회 실패: $e');
       return [];
     }
   }
@@ -68,7 +62,6 @@ class ForeignInvestorService {
     int limit = 30,
   }) async {
     try {
-      print('🔍 실제 DB에서 일별 외국인 수급 요약 조회 시작');
       
       // 기본 날짜 설정
       final String actualEndDate = endDate ?? DateFormat('yyyyMMdd').format(DateTime.now());
@@ -85,10 +78,8 @@ class ForeignInvestorService {
           .order('date', ascending: false)
           .limit(limit * 10); // 충분한 데이터 조회
       
-      print('📊 일별 요약 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 일별 요약 데이터가 없습니다.');
         return [];
       }
       
@@ -162,11 +153,9 @@ class ForeignInvestorService {
       // 날짜순 정렬 (최신순)
       result.sort((a, b) => b.date.compareTo(a.date));
       
-      print('✅ 일별 요약 데이터 ${result.length}개 반환');
       return result.take(limit).toList();
       
     } catch (e) {
-      print('일별 외국인 수급 요약 조회 실패: $e');
       return [];
     }
   }
@@ -178,7 +167,6 @@ class ForeignInvestorService {
     int limit = 20,
   }) async {
     try {
-      print('🔍 실제 DB에서 외국인 순매수 상위 종목 조회 시작');
       
       // 기본 날짜 설정 (최근 5일 내)
       final String queryDate = date ?? DateFormat('yyyyMMdd').format(DateTime.now());
@@ -195,10 +183,8 @@ class ForeignInvestorService {
           .order('net_amount', ascending: false)
           .limit(limit * 3); // 필터링을 위해 더 많이 조회
       
-      print('📊 상위 종목 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 상위 종목 데이터가 없습니다.');
         return [];
       }
       
@@ -225,18 +211,15 @@ class ForeignInvestorService {
           .map<ForeignInvestorData>((json) => ForeignInvestorData.fromJson(json))
           .toList();
       
-      print('✅ 상위 종목 데이터 ${result.length}개 반환');
       
       // 실제 데이터가 없으면 더미 데이터로 fallback
       if (result.isEmpty) {
-        print('⚠️ 실제 종목 데이터가 없어 더미 데이터로 fallback');
         return _getDummyTopBuyStocks(marketType, limit);
       }
       
       return result;
       
     } catch (e) {
-      print('외국인 순매수 상위 종목 조회 실패: $e');
       return _getDummyTopBuyStocks(marketType, limit);
     }
   }
@@ -248,7 +231,6 @@ class ForeignInvestorService {
     int limit = 20,
   }) async {
     try {
-      print('🔍 실제 DB에서 외국인 순매도 상위 종목 조회 시작');
       
       // 기본 날짜 설정 (최근 5일 내)
       final String queryDate = date ?? DateFormat('yyyyMMdd').format(DateTime.now());
@@ -265,10 +247,8 @@ class ForeignInvestorService {
           .order('net_amount', ascending: true) // 오름차순(가장 많이 판 것부터)
           .limit(limit * 3); // 필터링을 위해 더 많이 조회
       
-      print('📊 순매도 상위 종목 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 순매도 상위 종목 데이터가 없습니다.');
         return [];
       }
       
@@ -295,18 +275,15 @@ class ForeignInvestorService {
           .map<ForeignInvestorData>((json) => ForeignInvestorData.fromJson(json))
           .toList();
       
-      print('✅ 순매도 상위 종목 데이터 ${result.length}개 반환');
       
       // 실제 데이터가 없으면 더미 데이터로 fallback
       if (result.isEmpty) {
-        print('⚠️ 실제 종목 데이터가 없어 더미 데이터로 fallback');
         return _getDummyTopSellStocks(marketType, limit);
       }
       
       return result;
       
     } catch (e) {
-      print('외국인 순매도 상위 종목 조회 실패: $e');
       return _getDummyTopSellStocks(marketType, limit);
     }
   }
@@ -319,7 +296,6 @@ class ForeignInvestorService {
     int limit = 20,
   }) async {
     try {
-      print('🔍 기간별 외국인 순매수 상위 종목 조회: ${fromDate} ~ ${toDate}');
       
       // 개별 종목 데이터만 조회 (ticker가 null이 아닌 데이터)
       var queryBuilder = _client
@@ -337,10 +313,8 @@ class ForeignInvestorService {
       
       final response = await queryBuilder.order('date', ascending: false);
       
-      print('📊 기간별 순매수 종목 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 기간별 순매수 종목 데이터가 없습니다.');
         return _getDummyTopBuyStocks(marketType, limit);
       }
       
@@ -391,11 +365,9 @@ class ForeignInvestorService {
         );
       }).toList();
       
-      print('✅ 기간별 순매수 상위 종목 데이터 ${result.length}개 반환');
       return result;
       
     } catch (e) {
-      print('❌ 기간별 순매수 상위 종목 조회 실패: $e');
       return _getDummyTopBuyStocks(marketType, limit);
     }
   }
@@ -408,7 +380,6 @@ class ForeignInvestorService {
     int limit = 20,
   }) async {
     try {
-      print('🔍 기간별 외국인 거래금액 상위 종목 조회: ${fromDate} ~ ${toDate}');
       
       // 개별 종목 데이터만 조회 (ticker가 null이 아닌 데이터)
       var queryBuilder = _client
@@ -426,10 +397,8 @@ class ForeignInvestorService {
       
       final response = await queryBuilder.order('date', ascending: false);
       
-      print('📊 기간별 거래금액 종목 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 기간별 거래금액 종목 데이터가 없습니다.');
         return _getDummyTopBuyStocks(marketType, limit);
       }
       
@@ -483,11 +452,9 @@ class ForeignInvestorService {
         );
       }).toList();
       
-      print('✅ 기간별 거래금액 상위 종목 데이터 ${result.length}개 반환');
       return result;
       
     } catch (e) {
-      print('❌ 기간별 거래금액 상위 종목 조회 실패: $e');
       return _getDummyTopBuyStocks(marketType, limit);
     }
   }
@@ -500,7 +467,6 @@ class ForeignInvestorService {
     int limit = 20,
   }) async {
     try {
-      print('🔍 기간별 외국인 순매도 상위 종목 조회: ${fromDate} ~ ${toDate}');
       
       // 개별 종목 데이터만 조회 (ticker가 null이 아닌 데이터)
       var queryBuilder = _client
@@ -518,10 +484,8 @@ class ForeignInvestorService {
       
       final response = await queryBuilder.order('date', ascending: false);
       
-      print('📊 기간별 순매도 종목 DB 조회 결과: ${response.length}개 레코드');
       
       if (response.isEmpty) {
-        print('⚠️ 기간별 순매도 종목 데이터가 없습니다.');
         return _getDummyTopSellStocks(marketType, limit);
       }
       
@@ -555,7 +519,6 @@ class ForeignInvestorService {
       final sellStocks = allStocks.where((stock) => (stock['total_net_amount'] as int) < 0).toList();
       final buyStocks = allStocks.where((stock) => (stock['total_net_amount'] as int) > 0).toList();
       
-      print('📊 종목 분석: 전체 ${allStocks.length}개, 순매수 ${buyStocks.length}개, 순매도 ${sellStocks.length}개');
       
       // 순매도 상위 종목 필터링 및 정렬 (순매도 금액 기준)
       var topSellStocks = stockSummary.values
@@ -565,7 +528,6 @@ class ForeignInvestorService {
       
       // 순매도 종목이 충분하지 않으면 순매수가 가장 적은 종목들로 보완
       if (topSellStocks.length < limit) {
-        print('⚠️ 순매도 종목이 ${topSellStocks.length}개뿐이어서 순매수가 적은 종목들로 보완합니다.');
         
         // 순매수가 적은 종목들 추가 (0 이상인 것들 중 가장 적은 순)
         final lowBuyStocks = stockSummary.values
@@ -595,11 +557,9 @@ class ForeignInvestorService {
         );
       }).toList();
       
-      print('✅ 기간별 순매도 상위 종목 데이터 ${result.length}개 반환');
       return result;
       
     } catch (e) {
-      print('❌ 기간별 순매도 상위 종목 조회 실패: $e');
       return _getDummyTopSellStocks(marketType, limit);
     }
   }
@@ -611,7 +571,6 @@ class ForeignInvestorService {
       await _client.from(tableName).upsert(jsonDataList);
       _notifyDataUpdate();
     } catch (e) {
-      print('외국인 수급 데이터 저장 실패: $e');
       throw Exception('외국인 수급 데이터 저장 실패: $e');
     }
   }
@@ -619,7 +578,6 @@ class ForeignInvestorService {
   // 실시간 데이터 구독 시작 (에러 방지용 더미 구현)
   void startRealtimeSubscription() {
     // 실제 구독은 나중에 구현
-    print('실시간 데이터 구독 시작 (더미 구현)');
   }
 
   // 데이터 업데이트 알림
@@ -629,7 +587,6 @@ class ForeignInvestorService {
       _dataStreamController.add(latestData);
     } catch (e) {
       // 에러가 발생해도 스트림은 계속 동작하도록 함
-      print('데이터 업데이트 알림 실패: $e');
     }
   }
 

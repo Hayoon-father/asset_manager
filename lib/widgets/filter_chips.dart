@@ -12,19 +12,21 @@ class FilterChips extends StatelessWidget {
       child: Column(
         children: [
           // 시장 필터
-          Row(
-            children: [
-              const Text(
-                '시장: ',
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                const Text(
+                  '시장: ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Consumer<ForeignInvestorProvider>(
-                builder: (context, provider, _) {
-                  return Wrap(
+                const SizedBox(width: 8),
+                Consumer<ForeignInvestorProvider>(
+                  builder: (context, provider, _) {
+                    return Wrap(
                     spacing: 8,
                     children: [
                       _buildChoiceChip(
@@ -54,27 +56,30 @@ class FilterChips extends StatelessWidget {
                           if (selected) provider.setMarketFilter('KOSDAQ');
                         },
                       ),
-                    ],
-                  );
-                },
-              ),
-            ],
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           // 기간 필터
-          Row(
-            children: [
-              const Text(
-                '기간: ',
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                const Text(
+                  '기간: ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Consumer<ForeignInvestorProvider>(
-                builder: (context, provider, _) {
-                  return Wrap(
+                const SizedBox(width: 8),
+                Consumer<ForeignInvestorProvider>(
+                  builder: (context, provider, _) {
+                    return Wrap(
                     spacing: 8,
                     children: [
                       _buildChoiceChip(
@@ -113,11 +118,12 @@ class FilterChips extends StatelessWidget {
                           if (selected) provider.setDateRange('3M');
                         },
                       ),
-                    ],
-                  );
-                },
-              ),
-            ],
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
