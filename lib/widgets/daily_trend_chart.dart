@@ -199,30 +199,27 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
     final visibleDataCount = (widget.summaryData.length / _scale).round().clamp(3, widget.summaryData.length);
     final step = (widget.summaryData.length / visibleDataCount).round().clamp(1, widget.summaryData.length);
     
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const NeverScrollableScrollPhysics(),
-      child: SizedBox(
-        width: 280, // Fixed width to prevent overflow
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(visibleDataCount.clamp(3, 6), (index) {
-            final dataIndex = (index * step).clamp(0, widget.summaryData.length - 1);
-            final date = widget.summaryData[dataIndex].date;
-            final displayDate = date.length >= 8 
-                ? '${date.substring(4, 6)}/${date.substring(6, 8)}'
-                : date;
-            
-            return Flexible(
-              child: Text(
-                displayDate,
-                style: const TextStyle(fontSize: 10, color: Colors.grey),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            );
-          }),
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: List.generate(visibleDataCount.clamp(3, 5), (index) {
+          final dataIndex = (index * step).clamp(0, widget.summaryData.length - 1);
+          final date = widget.summaryData[dataIndex].date;
+          final displayDate = date.length >= 8 
+              ? '${date.substring(4, 6)}/${date.substring(6, 8)}'
+              : date;
+          
+          return Expanded(
+            child: Text(
+              displayDate,
+              style: const TextStyle(fontSize: 9, color: Colors.grey),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+            ),
+          );
+        }),
       ),
     );
   }
@@ -264,9 +261,9 @@ class _StockStyleChartPainter extends CustomPainter {
       ..color = Colors.grey.withOpacity(0.8)
       ..strokeWidth = 1.0;
 
-    // 안전한 클리핑 적용
+    // 강력한 클리핑 적용 - 차트 영역만 그리기 허용
     canvas.save();
-    canvas.clipRect(Rect.fromLTWH(0, 0, safeWidth, safeHeight));
+    canvas.clipRect(chartArea);
 
     // 누적 보유액 데이터로 최대/최소값 계산
     final values = data.map((d) => d.cumulativeHoldings).toList();
@@ -311,7 +308,9 @@ class _StockStyleChartPainter extends CustomPainter {
       final value = sortedData[i].cumulativeHoldings;
       final y = chartArea.height - ((value - minValue) / range) * chartArea.height;
 
-      final point = Offset(x, y.clamp(0.0, chartArea.height));
+      // Y축 범위를 더 엄격하게 제한 (5px 여유 공간)
+      final clampedY = y.clamp(5.0, chartArea.height - 5);
+      final point = Offset(x, clampedY);
       points.add(point);
       
       // 전일 대비 증감 판단
@@ -371,7 +370,9 @@ class _StockStyleChartPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     
     for (final point in increasingPoints) {
-      if (point.dx >= chartArea.left - 10 && point.dx <= chartArea.right + 10) {
+      // 포인트가 차트 영역 안에 있고, 여유 공간을 고려해서 그리기
+      if (point.dx >= chartArea.left && point.dx <= chartArea.right &&
+          point.dy >= 8 && point.dy <= 262) {
         canvas.drawCircle(point, 3.0, increasePointPaint);
         // 테두리
         canvas.drawCircle(point, 3.0, Paint()
@@ -387,7 +388,9 @@ class _StockStyleChartPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     
     for (final point in decreasingPoints) {
-      if (point.dx >= chartArea.left - 10 && point.dx <= chartArea.right + 10) {
+      // 포인트가 차트 영역 안에 있고, 여유 공간을 고려해서 그리기
+      if (point.dx >= chartArea.left && point.dx <= chartArea.right &&
+          point.dy >= 8 && point.dy <= 262) {
         canvas.drawCircle(point, 3.0, decreasePointPaint);
         // 테두리
         canvas.drawCircle(point, 3.0, Paint()

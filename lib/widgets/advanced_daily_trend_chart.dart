@@ -792,14 +792,14 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     }
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: labelIndices.map((index) {
           final data = sortedData[index];
           final displayDate = _formatDateForAxis(data.date);
           
-          return Flexible(
+          return Expanded(
             child: Text(
               displayDate,
               style: TextStyle(
@@ -975,9 +975,9 @@ class _AdvancedChartPainter extends CustomPainter {
       (safeHeight - 40).clamp(1.0, double.infinity)
     );
     
-    // 클리핑 적용
+    // 강력한 클리핑 적용 - 차트 영역만 그리기 허용
     canvas.save();
-    canvas.clipRect(Rect.fromLTWH(0, 0, safeWidth, safeHeight));
+    canvas.clipRect(chartArea);
 
     _drawGrid(canvas, chartArea);
     
@@ -1044,7 +1044,9 @@ class _AdvancedChartPainter extends CustomPainter {
       final value = sortedData[i].cumulativeHoldings;
       final normalizedValue = ((value - minValue) / range).clamp(0.0, 1.0);
       final y = chartArea.bottom - (normalizedValue * chartArea.height);
-      points.add(Offset(x, y.clamp(chartArea.top, chartArea.bottom)));
+      // Y축 범위를 더 엄격하게 제한 (5px 여유 공간)
+      final clampedY = y.clamp(chartArea.top + 5, chartArea.bottom - 5);
+      points.add(Offset(x, clampedY));
     }
 
     _drawAnimatedLine(canvas, points, Colors.blue.shade600, 3.0);
@@ -1089,7 +1091,9 @@ class _AdvancedChartPainter extends CustomPainter {
       final value = sortedData[i].cumulativeHoldings;
       final normalizedValue = ((value - minValue) / range).clamp(0.0, 1.0);
       final y = chartArea.bottom - (normalizedValue * chartArea.height);
-      points.add(Offset(x, y.clamp(chartArea.top, chartArea.bottom)));
+      // Y축 범위를 더 엄격하게 제한 (5px 여유 공간)
+      final clampedY = y.clamp(chartArea.top + 5, chartArea.bottom - 5);
+      points.add(Offset(x, clampedY));
     }
 
     _drawAnimatedLine(canvas, points, color, 2.5);
@@ -1157,7 +1161,9 @@ class _AdvancedChartPainter extends CustomPainter {
       if (i >= points.length) break;
       
       final point = points[i];
-      if (point.dx >= 80 - 10 && point.dx <= 80 + 300 + 10) {
+      // 포인트가 차트 영역 안에 있고, 여유 공간을 고려해서 그리기
+      if (point.dx >= 80 && point.dy >= 10 && point.dy <= 340) {
+        
         // 상승/하강에 따른 포인트 색상 결정
         Color pointColor = baseColor; // 기본 색상
         
