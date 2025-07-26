@@ -177,8 +177,8 @@ class _DailyTrendChartState extends State<DailyTrendChart> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: List.generate(steps + 1, (index) {
-            final value = maxValue - (stepValue * index);
-            final displayValue = (value / 1000000000000).toStringAsFixed(1); // 1조원 단위
+            final value = minValue + (stepValue * index);
+            final displayValue = (value / 1000000000000).abs().toStringAsFixed(1); // 1조원 단위, 절댓값 사용
             return Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Text(

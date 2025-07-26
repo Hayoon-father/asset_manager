@@ -21,11 +21,19 @@ class AdvancedDailyTrendChart extends StatefulWidget {
 class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     with TickerProviderStateMixin {
   
-  // 차트 상태
+  // 차트 상태 - static으로 전역 보존
+  static double _globalScale = 1.0;
+  static double _globalPanX = 0.0;
+  static bool _globalUserHasInteracted = false;
+  static bool _globalIsInitialViewSet = false;
+  static bool _globalViewportLocked = false; // 뷰포트 완전 잠금
+  
+  // 인스턴스 변수들 (전역 상태에서 복사)
   double _scale = 1.0;
   double _panX = 0.0;
   double _lastPanX = 0.0;
-  bool _isInitialViewSet = false; // 초기 뷰 설정 여부
+  bool _isInitialViewSet = false;
+  bool _userHasInteracted = false;
   
   // 툴팁 상태
   Offset? _tooltipPosition;
@@ -48,6 +56,52 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
   void initState() {
     super.initState();
     _setupAnimations();
+    
+    // 전역 상태에서 복원
+    _scale = _globalScale;
+    _panX = _globalPanX;
+    _userHasInteracted = _globalUserHasInteracted;
+    _isInitialViewSet = _globalIsInitialViewSet;
+    
+    print('🚀 AdvancedDailyTrendChart initState - 상태 복원');
+    print('   - scale: $_scale');
+    print('   - panX: $_panX');
+    print('   - userHasInteracted: $_userHasInteracted');
+    print('   - isInitialViewSet: $_isInitialViewSet');
+  }
+
+  @override
+  void didUpdateWidget(AdvancedDailyTrendChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    print('🔄 AdvancedDailyTrendChart didUpdateWidget 호출');
+    print('   - 이전 데이터 개수: ${oldWidget.summaryData.length}');
+    print('   - 현재 데이터 개수: ${widget.summaryData.length}');
+    print('   - 사용자 조작 여부: $_userHasInteracted');
+    print('   - 전역 사용자 조작 여부: $_globalUserHasInteracted');
+    print('   - 초기 뷰 설정 여부: $_isInitialViewSet');
+    print('   - 전역 초기 뷰 설정 여부: $_globalIsInitialViewSet');
+    
+    // 데이터 개수가 변경된 경우에만 처리
+    if (oldWidget.summaryData.length != widget.summaryData.length) {
+      // 사용자가 한 번이라도 조작했거나 초기 뷰가 이미 설정되었다면 뷰포트 변경 차단
+      final hasUserInteraction = _userHasInteracted || _globalUserHasInteracted;
+      final isViewAlreadySet = _isInitialViewSet || _globalIsInitialViewSet;
+      
+      if (hasUserInteraction || isViewAlreadySet) {
+        print('   🔒 뷰포트 변경 차단 - 사용자 조작 이력 또는 초기 뷰 설정 완료');
+        print('      - hasUserInteraction: $hasUserInteraction');
+        print('      - isViewAlreadySet: $isViewAlreadySet');
+        
+        // 상태를 명확히 설정하여 추가 초기화 방지
+        _isInitialViewSet = true;
+        _globalIsInitialViewSet = true;
+        _saveStateToGlobal();
+      } else {
+        print('   🔄 최초 데이터 로드 - 초기 뷰포트 설정 허용');
+        // 이 경우에만 초기 뷰포트 재설정 허용
+        _isInitialViewSet = false;
+      }
+    }
   }
 
   void _setupAnimations() {
@@ -72,8 +126,22 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     _animationController.forward();
   }
 
+  // 상태를 전역에 저장하는 헬퍼 함수
+  void _saveStateToGlobal() {
+    _globalScale = _scale;
+    _globalPanX = _panX;
+    _globalUserHasInteracted = _userHasInteracted;
+    _globalIsInitialViewSet = _isInitialViewSet;
+    if (_userHasInteracted) {
+      _globalViewportLocked = true; // 사용자 조작 시 완전 잠금
+      print('🔒 뷰포트 완전 잠금 활성화');
+    }
+  }
+
   @override
   void dispose() {
+    // 위젯 해제 시 상태 저장
+    _saveStateToGlobal();
     _animationController.dispose();
     _tooltipController.dispose();
     super.dispose();
@@ -85,15 +153,89 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
       return _buildEmptyState();
     }
     
-    // 데이터가 변경되면 초기 뷰포트 재설정
-    if (!_isInitialViewSet) {
+    // 뷰포트가 잠겨있으면 무조건 차단
+    if (_globalViewportLocked) {
+      print('🔒 뷰포트 잠금 상태 - 모든 초기화 차단');
+      return Card(
+        elevation: 4,
+        shadowColor: Colors.black.withOpacity(0.1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white,
+                Colors.grey.shade50,
+              ],
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 16),
+                _buildLegendAndControls(),
+                const SizedBox(height: 20),
+                Container(
+                  height: 350,
+                  width: double.infinity,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: const BoxDecoration(),
+                  child: _buildAdvancedChart(),
+                ),
+                const SizedBox(height: 16),
+                _buildChartInfo(),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // 뷰포트 설정 조건을 더 엄격하게 체크
+    final hasAnyUserInteraction = _userHasInteracted || _globalUserHasInteracted;
+    final isViewportAlreadySet = _isInitialViewSet || _globalIsInitialViewSet;
+    final isViewportLocked = _globalViewportLocked;
+    
+    // 사용자 조작이 있었거나, 뷰포트가 이미 설정되었거나, 뷰포트가 잠겨있으면 설정하지 않음
+    if (!isViewportAlreadySet && !hasAnyUserInteraction && !isViewportLocked) {
+      print('📋 초기 뷰포트 설정 조건 체크:');
+      print('   - _isInitialViewSet: $_isInitialViewSet');
+      print('   - _globalIsInitialViewSet: $_globalIsInitialViewSet');
+      print('   - _userHasInteracted: $_userHasInteracted');
+      print('   - _globalUserHasInteracted: $_globalUserHasInteracted');
+      print('   - _globalViewportLocked: $_globalViewportLocked');
+      print('   - 데이터 개수: ${widget.summaryData.length}');
+      
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_isInitialViewSet) {
+        // PostFrameCallback에서 다시 한 번 조건 체크
+        final stillNoInteraction = !_userHasInteracted && !_globalUserHasInteracted;
+        final stillNotSet = !_isInitialViewSet && !_globalIsInitialViewSet;
+        final stillNotLocked = !_globalViewportLocked;
+        
+        if (mounted && stillNotSet && stillNoInteraction && stillNotLocked) {
+          print('   ✅ 초기 뷰포트 설정 실행');
           setState(() {
             _setInitialViewport();
           });
+        } else {
+          print('   ❌ 초기 뷰포트 설정 건너뜀 (조건 변경됨)');
+          print('      - mounted: $mounted');
+          print('      - stillNotSet: $stillNotSet');
+          print('      - stillNoInteraction: $stillNoInteraction');
+          print('      - stillNotLocked: $stillNotLocked');
         }
       });
+    } else {
+      print('📋 초기 뷰포트 설정 완전 차단:');
+      print('   - isViewportAlreadySet: $isViewportAlreadySet');
+      print('   - hasAnyUserInteraction: $hasAnyUserInteraction');
+      print('   - isViewportLocked: $isViewportLocked');
     }
 
     return Card(
@@ -248,6 +390,9 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
       onTap: () {
         setState(() {
           _viewType = type;
+          // 뷰 타입 변경도 사용자 조작으로 간주
+          _userHasInteracted = true;
+          _saveStateToGlobal();
         });
         _animationController.reset();
         _animationController.forward();
@@ -335,7 +480,12 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
 
   Widget _buildLegendItem(Color color, String label, bool isVisible, Function(bool) onChanged) {
     return GestureDetector(
-      onTap: () => onChanged(!isVisible),
+      onTap: () {
+        onChanged(!isVisible);
+        // 범례 토글도 사용자 조작으로 간주
+        _userHasInteracted = true;
+        _saveStateToGlobal();
+      },
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -379,8 +529,13 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
   }
 
   Widget _buildAdvancedChart() {
-    // 초기 뷰포트 설정 (60일 전부터 현재까지 표시)
-    if (!_isInitialViewSet && widget.summaryData.isNotEmpty) {
+    // 초기 뷰포트 설정 조건 체크 - 더 엄격하게
+    if (!_isInitialViewSet && 
+        !_globalIsInitialViewSet && 
+        !_userHasInteracted && 
+        !_globalUserHasInteracted && 
+        !_globalViewportLocked && 
+        widget.summaryData.isNotEmpty) {
       _setInitialViewport();
     }
     
@@ -396,6 +551,9 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
                 onScaleStart: (details) {
                   _lastPanX = _panX;
                   _hideTooltip();
+                  // 사용자가 조작을 시작했음을 표시
+                  _userHasInteracted = true;
+                  _saveStateToGlobal();
                 },
                 onScaleUpdate: (details) {
                   setState(() {
@@ -427,6 +585,9 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
                         _requestMoreHistoricalData();
                       }
                     }
+                    
+                    // 상태 변경 시마다 전역에 저장
+                    _saveStateToGlobal();
                   });
                 },
                 onTapDown: (details) {
@@ -584,9 +745,26 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
 
   DateTime? _lastHistoricalDataRequest;
 
-  // 초기 뷰포트 설정 (60일 전부터 현재까지 표시)
+  // 초기 뷰포트 설정 (60일 전부터 현재까지 표시) - 최초 1회만
   void _setInitialViewport() {
-    if (widget.summaryData.isEmpty) return;
+    // 뷰포트 설정 조건을 다시 한 번 체크 (중요!)
+    if (widget.summaryData.isEmpty || 
+        _userHasInteracted || 
+        _globalUserHasInteracted || 
+        _isInitialViewSet || 
+        _globalIsInitialViewSet ||
+        _globalViewportLocked) {
+      print('❌ 초기 뷰포트 설정 중단');
+      print('   - summaryData.isEmpty: ${widget.summaryData.isEmpty}');
+      print('   - _userHasInteracted: $_userHasInteracted');
+      print('   - _globalUserHasInteracted: $_globalUserHasInteracted');
+      print('   - _isInitialViewSet: $_isInitialViewSet');
+      print('   - _globalIsInitialViewSet: $_globalIsInitialViewSet');
+      print('   - _globalViewportLocked: $_globalViewportLocked');
+      return;
+    }
+    
+    print('🔄 초기 뷰포트 설정 실행 중...');
     
     // 데이터를 날짜순으로 정렬 (과거 -> 최신)
     final sortedData = List<DailyForeignSummary>.from(widget.summaryData);
@@ -605,13 +783,18 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
       // 최신 데이터(오른쪽 끝)이 보이도록 팬 위치 조정
       final scaledWidth = chartWidth * _scale;
       _panX = -(scaledWidth - chartWidth);
+      
+      print('📊 데이터 ${sortedData.length}개 → 최근 60일 표시 (scale: ${_scale.toStringAsFixed(2)})');
     } else {
       // 60일 이하면 전체 데이터 표시
       _scale = 1.0;
       _panX = 0.0;
+      
+      print('📊 전체 데이터 ${sortedData.length}개 표시');
     }
     
     _isInitialViewSet = true;
+    _saveStateToGlobal();
   }
 
   Widget _buildTooltip(DailyForeignSummary data) {
@@ -694,7 +877,7 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: List.generate(stepCount, (index) {
-        final value = startValue + (normalizedStep * (stepCount - 1 - index));
+        final value = startValue + (normalizedStep * index);
         final formattedValue = _formatAxisValue(value);
         
         return Padding(
@@ -714,31 +897,30 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     );
   }
 
-  // Y축 값의 적절한 단위로 포맷팅
+  // Y축 값의 적절한 단위로 포맷팅 (마이너스 기호 제거)
   String _formatAxisValue(int value) {
     final absValue = value.abs();
-    final sign = value < 0 ? '-' : '';
     
     if (absValue >= 1000000000000) { // 1조 이상
       final trillion = absValue / 1000000000000;
       if (trillion >= 100) {
-        return '$sign${trillion.toStringAsFixed(0)}조';
+        return '${trillion.toStringAsFixed(0)}조';
       } else if (trillion >= 10) {
-        return '$sign${trillion.toStringAsFixed(1)}조';
+        return '${trillion.toStringAsFixed(1)}조';
       } else {
-        return '$sign${trillion.toStringAsFixed(2)}조';
+        return '${trillion.toStringAsFixed(2)}조';
       }
     } else if (absValue >= 100000000000) { // 1000억 이상
       final hundredBillion = absValue / 100000000000;
-      return '$sign${hundredBillion.toStringAsFixed(1)}천억';
+      return '${hundredBillion.toStringAsFixed(1)}천억';
     } else if (absValue >= 100000000) { // 1억 이상
       final billion = absValue / 100000000;
-      return '$sign${billion.toStringAsFixed(0)}억';
+      return '${billion.toStringAsFixed(0)}억';
     } else if (absValue >= 10000) { // 1만 이상
       final million = absValue / 10000;
-      return '$sign${million.toStringAsFixed(0)}만';
+      return '${million.toStringAsFixed(0)}만';
     } else {
-      return '$sign$absValue';
+      return '$absValue';
     }
   }
 

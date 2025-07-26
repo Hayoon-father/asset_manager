@@ -27,6 +27,7 @@ class ForeignInvestorProvider with ChangeNotifier {
   List<DailyForeignSummary> _chartDailySummary = []; // 차트용 고정 1개월 데이터
   List<DailyForeignSummary> _historicalDailySummary = []; // 과거 데이터 캐시 (3개월~1년)
   List<DailyForeignSummary> _visibleChartData = []; // 현재 차트에 표시되는 데이터 (점진적 로딩)
+  List<DailyForeignSummary> _fixedChartData = []; // 그래프용 고정 데이터 (60일간)
   List<ForeignInvestorData> _topBuyStocks = [];
   List<ForeignInvestorData> _topSellStocks = [];
   
@@ -50,6 +51,7 @@ class ForeignInvestorProvider with ChangeNotifier {
   List<DailyForeignSummary> get dailySummary => _dailySummary;
   List<DailyForeignSummary> get chartDailySummary => _chartDailySummary; // 차트용 데이터
   List<DailyForeignSummary> get historicalDailySummary => _historicalDailySummary;
+  List<DailyForeignSummary> get fixedChartData => _fixedChartData; // 그래프용 고정 데이터
   List<ForeignInvestorData> get topBuyStocks => _topBuyStocks;
   List<ForeignInvestorData> get topSellStocks => _topSellStocks;
   bool get isCachingHistoricalData => _isCachingHistoricalData;
@@ -361,6 +363,9 @@ class ForeignInvestorProvider with ChangeNotifier {
       
       // 초기 표시 데이터는 최근 60일만 설정
       _visibleChartData = List.from(_chartDailySummary);
+      
+      // 그래프용 고정 데이터 설정 (60일간 고정, loadMoreHistoricalData 영향 받지 않음)
+      _fixedChartData = List.from(_chartDailySummary);
       
     } catch (e) {
       _setError('차트용 일별 요약 데이터 로드 실패: $e');
@@ -765,15 +770,15 @@ class ForeignInvestorProvider with ChangeNotifier {
     return chartData; // 좌측이 과거, 우측이 최신
   }
 
-  // 외국인 보유 총액 트렌드 데이터 (누적 계산) - 점진적 로딩 버전
+  // 외국인 보유 총액 트렌드 데이터 (누적 계산) - 고정 60일 버전
   List<DailyForeignSummary> getForeignHoldingsTrendData() {
-    // 현재 표시할 데이터만 사용 (초기: 60일, 스크롤 시 점진적 확장)
-    if (_visibleChartData.isEmpty) return [];
+    // 고정 차트 데이터 사용 (60일 고정, loadMoreHistoricalData 영향 받지 않음)
+    if (_fixedChartData.isEmpty) return [];
     
     // 날짜별로 그룹화하여 KOSPI + KOSDAQ 합계 데이터와 개별 데이터 모두 생성
     final Map<String, List<DailyForeignSummary>> groupedByDate = {};
     
-    for (final summary in _visibleChartData) {
+    for (final summary in _fixedChartData) {
       final date = summary.date;
       if (!groupedByDate.containsKey(date)) {
         groupedByDate[date] = [];
