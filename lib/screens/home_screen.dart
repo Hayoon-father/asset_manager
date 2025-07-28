@@ -227,6 +227,15 @@ class _HomeScreenState extends State<HomeScreen>
             const SizedBox(height: 16),
           ],
           
+          // 외국인 매매 현황 그래프 (최근 1개월)
+          AdvancedDailyTrendChart(
+            summaryData: provider.getForeignHoldingsTrendData(),
+            selectedMarket: provider.selectedMarket,
+            onRequestMoreData: () => provider.loadMoreHistoricalData(),
+          ),
+          
+          const SizedBox(height: 16),
+          
           // 외국인 순매수 상위 (순매수 금액 기준)
           TopStocksList(
             title: '외국인 순매수 상위 (순매수 금액 기준)',
@@ -241,15 +250,6 @@ class _HomeScreenState extends State<HomeScreen>
             title: '외국인 순매도 상위 (순매도 금액 기준)',
             stocks: provider.topSellStocks,
             isPositive: false,
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // 외국인 매매 현황 그래프 (최근 1개월)
-          AdvancedDailyTrendChart(
-            summaryData: provider.getForeignHoldingsTrendData(),
-            selectedMarket: provider.selectedMarket,
-            onRequestMoreData: () => provider.loadMoreHistoricalData(),
           ),
           
           const SizedBox(height: 16),
