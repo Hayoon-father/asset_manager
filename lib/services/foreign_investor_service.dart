@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/foreign_investor_data.dart';
@@ -739,6 +741,47 @@ class ForeignInvestorService {
     }
     
     return result;
+  }
+
+  /// 실제 보유액 데이터 조회 (pykrx API)
+  Future<Map<String, dynamic>?> getActualHoldingsData(
+    String fromDate,
+    String toDate,
+    String selectedMarket,
+  ) async {
+    print('🔍 실제 보유액 데이터 조회: $fromDate ~ $toDate, 시장: $selectedMarket');
+    
+    try {
+      // pykrx 서버 직접 호출 (기본 방식)
+      final uri = Uri.parse('http://127.0.0.1:8000/foreign_holdings_value_range')
+          .replace(queryParameters: {
+        'from_date': fromDate,
+        'to_date': toDate,
+        'markets': selectedMarket == 'ALL' ? 'KOSPI,KOSDAQ' : selectedMarket,
+      });
+      
+      print('🔄 pykrx 서버 호출: $uri');
+      
+      final response = await http.get(uri).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('API 호출 시간 초과 (30초)');
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        print('✅ pykrx 서버 호출 성공: ${data['count']}개');
+        return data;
+      } else {
+        print('❌ pykrx 서버 호출 실패: ${response.statusCode}');
+        print('❌ 응답 내용: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ pykrx 서버 호출 오류: $e');
+      return null;
+    }
   }
 
   // 리소스 정리

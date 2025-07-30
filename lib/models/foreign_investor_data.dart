@@ -151,8 +151,11 @@ class DailyForeignSummary {
   final int foreignBuyAmount; // 외국인 매수금액
   final int foreignSellAmount; // 외국인 매도금액
   
-  // 누적 보유액 (계산된 값)
+  // 누적 보유액 (계산된 값) - 순매수 누적
   int cumulativeHoldings = 0;
+  
+  // 실제 보유액 (pykrx API에서 계산된 값)
+  int actualHoldingsValue = 0;
 
   DailyForeignSummary({
     required this.date,
@@ -163,6 +166,7 @@ class DailyForeignSummary {
     required this.foreignBuyAmount,
     required this.foreignSellAmount,
     this.cumulativeHoldings = 0,
+    this.actualHoldingsValue = 0,
   });
 
   factory DailyForeignSummary.fromJson(Map<String, dynamic> json) {

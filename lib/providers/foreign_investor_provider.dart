@@ -4,12 +4,15 @@ import '../services/foreign_investor_service.dart';
 import '../services/data_sync_service.dart';
 import '../services/offline_service.dart';
 import '../services/priority_data_service.dart';
+import '../services/holdings_value_service.dart';
+import '../widgets/chart_holdings_fixer.dart';
 
 class ForeignInvestorProvider with ChangeNotifier {
   final ForeignInvestorService _service = ForeignInvestorService();
   final DataSyncService _syncService = DataSyncService();
   final OfflineService _offlineService = OfflineService();
   final PriorityDataService _priorityService = PriorityDataService();
+  final HoldingsValueService _holdingsService = HoldingsValueService();
   
   // 상태 변수들
   bool _isLoading = false;
@@ -33,6 +36,7 @@ class ForeignInvestorProvider with ChangeNotifier {
   
   // 백그라운드 캐싱 상태
   bool _isCachingHistoricalData = false;
+  bool _isLoadingActualHoldings = false;
   
   String _selectedMarket = 'ALL'; // ALL, KOSPI, KOSDAQ
   String _selectedDateRange = '1D'; // 1D, 7D, 30D, 3M
@@ -154,7 +158,10 @@ class ForeignInvestorProvider with ChangeNotifier {
         loadTopStocks(),
       ]);
       
-      // 3단계: 백그라운드에서 과거 데이터 캐싱 시작
+      // 3단계: 실제 보유액 데이터는 사용자가 "실제보유액" 버튼 클릭 시에만 로드
+      // (초기화 속도 개선을 위해 제거)
+      
+      // 4단계: 백그라운드에서 과거 데이터 캐싱 시작
       _startHistoricalDataCaching();
     } catch (e) {
       _setError('초기 데이터 로드 실패: $e');
@@ -290,6 +297,15 @@ class ForeignInvestorProvider with ChangeNotifier {
         _currentDataSource = DataSource.none;
       }
       
+      // 실제 보유액 데이터도 자동 로드 (백그라운드)
+      try {
+        print('🔄 실제 보유액 데이터 자동 로드 시작');
+        await loadActualHoldingsData();
+      } catch (e) {
+        print('⚠️ 실제 보유액 데이터 자동 로드 실패: $e');
+        // 실제 보유액 로드 실패는 전체 로드를 실패시키지 않음
+      }
+      
     } catch (e) {
       _setError('데이터 로드 실패: $e');
       _currentDataSource = DataSource.none;
@@ -366,6 +382,19 @@ class ForeignInvestorProvider with ChangeNotifier {
       
       // 그래프용 고정 데이터 설정 (60일간 고정, loadMoreHistoricalData 영향 받지 않음)
       _fixedChartData = List.from(_chartDailySummary);
+      
+      // 차트 데이터가 준비되면 실제 보유액 데이터도 자동 로드
+      if (_fixedChartData.isNotEmpty) {
+        try {
+          print('🔄 차트 데이터 로드 후 실제 보유액 데이터 자동 로드 시작');
+          // 백그라운드에서 실제 보유액 데이터 로드 (비동기)
+          loadActualHoldingsData().catchError((e) {
+            print('⚠️ 차트용 실제 보유액 데이터 자동 로드 실패: $e');
+          });
+        } catch (e) {
+          print('⚠️ 실제 보유액 데이터 자동 로드 시작 실패: $e');
+        }
+      }
       
     } catch (e) {
       _setError('차트용 일별 요약 데이터 로드 실패: $e');
@@ -638,6 +667,12 @@ class ForeignInvestorProvider with ChangeNotifier {
     notifyListeners();
   }
   
+  // 동기화 메시지 설정
+  void _setSyncMessage(String message) {
+    _syncMessage = message;
+    notifyListeners();
+  }
+  
   // 유틸리티 메서드들
   String formatAmount(int amount) {
     return ForeignInvestorService.formatAmount(amount);
@@ -775,7 +810,11 @@ class ForeignInvestorProvider with ChangeNotifier {
     // 고정 차트 데이터 사용 (60일 고정, loadMoreHistoricalData 영향 받지 않음)
     if (_fixedChartData.isEmpty) return [];
     
-    // 날짜별로 그룹화하여 KOSPI + KOSDAQ 합계 데이터와 개별 데이터 모두 생성
+    // 실제 보유액 데이터가 로드되었는지 확인
+    final hasActualData = _fixedChartData.any((d) => d.actualHoldingsValue > 0);
+    print('📊 getForeignHoldingsTrendData: 실제 보유액 데이터 존재=${hasActualData}');
+    
+    // 날짜별로 그룹화하여 KOSPI + KOSDAQ 합계 데이터만 생성 (중복 제거)
     final Map<String, List<DailyForeignSummary>> groupedByDate = {};
     
     for (final summary in _fixedChartData) {
@@ -791,39 +830,24 @@ class ForeignInvestorProvider with ChangeNotifier {
       ..sort((a, b) => a.key.compareTo(b.key));
     
     final result = <DailyForeignSummary>[];
-    final Map<String, int> cumulativeByMarket = {'KOSPI': 0, 'KOSDAQ': 0, 'ALL': 0};
+    int cumulativeAll = 0;
     
+    // 🔧 실제 보유액 차트용: 날짜별로 ALL(전체) 데이터만 생성
     for (final entry in sortedEntries) {
       final date = entry.key;
       final summaries = entry.value;
       
-      // 각 시장별 데이터 처리
-      for (final summary in summaries) {
-        final marketType = summary.marketType;
-        cumulativeByMarket[marketType] = 
-            (cumulativeByMarket[marketType] ?? 0) + summary.totalForeignNetAmount;
-        
-        // 누적 보유액 저장
-        final updatedSummary = DailyForeignSummary(
-          date: summary.date,
-          marketType: summary.marketType,
-          foreignNetAmount: summary.foreignNetAmount,
-          otherForeignNetAmount: summary.otherForeignNetAmount,
-          totalForeignNetAmount: summary.totalForeignNetAmount,
-          foreignBuyAmount: summary.foreignBuyAmount,
-          foreignSellAmount: summary.foreignSellAmount,
-        );
-        updatedSummary.cumulativeHoldings = cumulativeByMarket[marketType]!;
-        result.add(updatedSummary);
-      }
-      
-      // 전체 시장 합계 데이터도 추가 (차트에서 통합 뷰용)
+      // 해당 날짜의 전체 시장 합계 계산
       final totalNetAmount = summaries.fold<int>(0, (sum, s) => sum + s.totalForeignNetAmount);
       final totalBuyAmount = summaries.fold<int>(0, (sum, s) => sum + s.foreignBuyAmount);
       final totalSellAmount = summaries.fold<int>(0, (sum, s) => sum + s.foreignSellAmount);
       
-      cumulativeByMarket['ALL'] = (cumulativeByMarket['ALL'] ?? 0) + totalNetAmount;
+      // KOSPI + KOSDAQ 실제 보유액 합계 계산
+      final totalActualHoldings = summaries.fold<int>(0, (sum, s) => sum + s.actualHoldingsValue);
       
+      cumulativeAll += totalNetAmount;
+      
+      // 전체 시장 합계 데이터만 추가 (날짜별 1개씩만)
       final combinedSummary = DailyForeignSummary(
         date: date,
         marketType: 'ALL',
@@ -833,9 +857,13 @@ class ForeignInvestorProvider with ChangeNotifier {
         foreignBuyAmount: totalBuyAmount,
         foreignSellAmount: totalSellAmount,
       );
-      combinedSummary.cumulativeHoldings = cumulativeByMarket['ALL']!;
+      combinedSummary.cumulativeHoldings = cumulativeAll;
+      combinedSummary.actualHoldingsValue = totalActualHoldings; // 실제 보유액도 합계로 설정
+      
       result.add(combinedSummary);
     }
+    
+    print('📊 getForeignHoldingsTrendData: ${result.length}개 데이터 반환 (날짜별 1개씩)');
     
     return result;
   }
@@ -1061,6 +1089,209 @@ class ForeignInvestorProvider with ChangeNotifier {
     // 최신순 정렬
     extendedData.sort((a, b) => b.date.compareTo(a.date));
     return extendedData;
+  }
+
+  /// 실제 보유액 데이터 로드 (개선된 DB 우선 시스템)
+  Future<void> loadActualHoldingsData() async {
+    // 이미 로딩 중이면 중단
+    if (_isLoadingActualHoldings) {
+      print('🔄 실제 보유액 데이터 이미 로딩 중 - 중복 요청 무시');
+      return;
+    }
+    
+    _isLoadingActualHoldings = true;
+    print('🔄 개선된 실제 보유액 데이터 로딩 시작 (DB 우선)');
+    
+    try {
+      if (_fixedChartData.isEmpty) {
+        print('❌ 차트 데이터가 없어 실제 보유액 로딩 중단');
+        print('   _fixedChartData.length: ${_fixedChartData.length}');
+        _setSyncMessage('차트 데이터를 먼저 로드해주세요.');
+        return;
+      }
+      
+      print('🔍 차트 데이터 현황:');
+      print('   _fixedChartData.length: ${_fixedChartData.length}');
+      print('   최근 3개 차트 데이터:');
+      for (int i = 0; i < _fixedChartData.length && i < 3; i++) {
+        final data = _fixedChartData[i];
+        print('     [$i] ${data.date} ${data.marketType}: actualHoldingsValue=${data.actualHoldingsValue}');
+      }
+
+      _setSyncMessage('DB 및 캐시에서 실제 보유액 데이터 확인 중...');
+
+      // 우선순위 기반 데이터 로드 시스템 사용
+      // 1. DB/캐시에서 즉시 데이터 출력
+      // 2. 백그라운드에서 증분 데이터 업데이트
+      // 3. API 실패 시 원인 분석 및 재시도
+      final holdingsDataList = await _holdingsService.getImmediateData(
+        days: 60, // 충분한 데이터 범위
+        markets: ['KOSPI', 'KOSDAQ'],
+      );
+
+      print('🔍 HoldingsService 조회 결과:');
+      print('   holdingsDataList.length: ${holdingsDataList.length}');
+      
+      if (holdingsDataList.isNotEmpty) {
+        print('   첫 번째 보유액 데이터: ${holdingsDataList.first.date} ${holdingsDataList.first.marketType} ${holdingsDataList.first.totalHoldingsValue}');
+        _setSyncMessage('실제 보유액 데이터 차트에 적용 중...');
+        
+        // 날짜별로 그룹화
+        final Map<String, Map<String, int>> holdingsMap = {};
+        
+        for (final data in holdingsDataList) {
+          if (!holdingsMap.containsKey(data.date)) {
+            holdingsMap[data.date] = {};
+          }
+          holdingsMap[data.date]![data.marketType] = data.totalHoldingsValue;
+        }
+        
+        print('🔍 로드된 실제 보유액 데이터 현황:');
+        print('  - 총 데이터 수: ${holdingsDataList.length}개');
+        print('  - 고유 날짜 수: ${holdingsMap.keys.length}개');
+        
+        // 최신 몇 개 날짜의 데이터 출력
+        final sortedDates = holdingsMap.keys.toList()..sort((a, b) => b.compareTo(a));
+        for (final date in sortedDates.take(3)) {
+          final markets = holdingsMap[date]!;
+          final kospiValue = markets['KOSPI'] ?? 0;
+          final kosdaqValue = markets['KOSDAQ'] ?? 0;
+          print('  - $date: KOSPI ${kospiValue ~/ 1000000000000}조원, KOSDAQ ${kosdaqValue ~/ 1000000000000}조원');
+          print('    - 상세: KOSPI=$kospiValue, KOSDAQ=$kosdaqValue');
+        }
+        
+        // 디버깅: 첫 번째 데이터 샘플 출력
+        if (holdingsDataList.isNotEmpty) {
+          final sample = holdingsDataList.first;
+          print('🔍 첫 번째 데이터 샘플:');
+          print('  - date: "${sample.date}"');
+          print('  - marketType: "${sample.marketType}"');
+          print('  - totalHoldingsValue: ${sample.totalHoldingsValue}');
+          print('  - 타입: ${sample.totalHoldingsValue.runtimeType}');
+        }
+        
+        // 기존 차트 데이터에 실제 보유액 값 적용
+        int exactMatchCount = 0;
+        int fallbackCount = 0;
+        
+        // 최신 데이터 (폴백용)
+        final latestKospiValue = _getLatestValue(holdingsMap, 'KOSPI');
+        final latestKosdaqValue = _getLatestValue(holdingsMap, 'KOSDAQ');
+        
+        print('🔍 폴백용 최신 보유액: KOSPI ${latestKospiValue ~/ 1000000000000}조원, KOSDAQ ${latestKosdaqValue ~/ 1000000000000}조원');
+        
+        for (final summary in _fixedChartData) {
+          final date = summary.date;
+          final originalValue = summary.actualHoldingsValue; // 기존 값 기록
+          
+          if (holdingsMap.containsKey(date)) {
+            // 정확한 날짜 매칭
+            final marketHoldings = holdingsMap[date]!;
+            
+            if (summary.marketType == 'ALL') {
+              final kospiValue = marketHoldings['KOSPI'] ?? 0;
+              final kosdaqValue = marketHoldings['KOSDAQ'] ?? 0;
+              final totalValue = kospiValue + kosdaqValue;
+              summary.actualHoldingsValue = totalValue;
+              exactMatchCount++;
+              
+              // 디버깅: 값 변화 추적
+              print('📊 [${date}] ALL: ${originalValue} → ${totalValue} (KOSPI: ${kospiValue ~/ 1000000000000}조, KOSDAQ: ${kosdaqValue ~/ 1000000000000}조)');
+            } else {
+              final value = marketHoldings[summary.marketType] ?? 0;
+              summary.actualHoldingsValue = value;
+              exactMatchCount++;
+              
+              // 디버깅: 값 변화 추적
+              print('📊 [${date}] ${summary.marketType}: ${originalValue} → ${value} (${value ~/ 1000000000000}조원)');
+            }
+          } else {
+            // 날짜 매칭 실패 시 최신 데이터로 폴백
+            if (summary.marketType == 'ALL') {
+              summary.actualHoldingsValue = latestKospiValue + latestKosdaqValue;
+            } else if (summary.marketType == 'KOSPI') {
+              summary.actualHoldingsValue = latestKospiValue;
+            } else if (summary.marketType == 'KOSDAQ') {
+              summary.actualHoldingsValue = latestKosdaqValue;
+            }
+            fallbackCount++;
+            
+            // 디버깅: 폴백 값 추적
+            print('📊 [${date}] ${summary.marketType}: ${originalValue} → ${summary.actualHoldingsValue} (폴백)');
+          }
+        }
+        
+        _setSyncMessage('실제 보유액 데이터 로딩 완료');
+        print('✅ 개선된 실제 보유액 데이터 로딩 완료');
+        print('📊 적용 결과: 정확매칭 ${exactMatchCount}개, 폴백 ${fallbackCount}개 (전체 ${_fixedChartData.length}개)');
+        
+        // 0인 데이터 확인
+        final zeroCount = _fixedChartData.where((d) => d.actualHoldingsValue == 0).length;
+        if (zeroCount > 0) {
+          print('⚠️ 실제 보유액이 0인 데이터: ${zeroCount}개');
+          print('   0인 데이터 샘플:');
+          final zeroData = _fixedChartData.where((d) => d.actualHoldingsValue == 0).take(3);
+          for (final data in zeroData) {
+            print('     - ${data.date} ${data.marketType}: actualHoldingsValue=${data.actualHoldingsValue}');
+          }
+        } else {
+          print('✅ 모든 차트 데이터에 실제 보유액이 적용됨');
+          print('   비0 데이터 샘플:');
+          final nonZeroData = _fixedChartData.where((d) => d.actualHoldingsValue > 0).take(3);
+          for (final data in nonZeroData) {
+            final trillion = data.actualHoldingsValue / 1000000000000;
+            print('     - ${data.date} ${data.marketType}: ${trillion.toStringAsFixed(1)}조원');
+          }
+        }
+        
+        // 🔧 ChartHoldingsFixer로 추가 수정 실행
+        print('🔧 Provider에서 ChartHoldingsFixer 실행');
+        try {
+          final wasFixed = await ChartHoldingsFixer.fixActualHoldingsValues(_fixedChartData);
+          print('🔧 Provider ChartHoldingsFixer 수정 결과: $wasFixed');
+          
+          if (wasFixed) {
+            print('🔄 Provider에서 ChartHoldingsFixer 수정 후 추가 notifyListeners() 호출');
+            notifyListeners(); // 추가 업데이트 알림
+          }
+        } catch (e) {
+          print('🔧 Provider ChartHoldingsFixer 실행 실패: $e');
+        }
+        
+        notifyListeners();
+      } else {
+        print('❌ 실제 보유액 데이터를 로드할 수 없음 (DB, API 모두 실패)');
+        _setSyncMessage('❌ 실제 보유액 데이터를 가져올 수 없습니다. 네트워크와 서버 상태를 확인해주세요.');
+      }
+      
+    } catch (e) {
+      print('❌ 실제 보유액 데이터 로딩 실패: $e');
+      _setSyncMessage('❌ 실제 보유액 데이터 로딩 실패: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e.toString()}');
+      
+      // 5초 후 메시지 클리어
+      Future.delayed(const Duration(seconds: 5), () {
+        if (_syncMessage?.contains('❌') == true) {
+          _syncMessage = null;
+          notifyListeners();
+        }
+      });
+    } finally {
+      _isLoadingActualHoldings = false;
+    }
+  }
+  
+  /// 헬퍼 메서드: 특정 시장의 최신 보유액 값 가져오기
+  int _getLatestValue(Map<String, Map<String, int>> holdingsMap, String marketType) {
+    final sortedDates = holdingsMap.keys.toList()..sort((a, b) => b.compareTo(a));
+    
+    for (final date in sortedDates) {
+      final value = holdingsMap[date]![marketType];
+      if (value != null && value > 0) {
+        return value;
+      }
+    }
+    
+    return 0;
   }
 
   @override

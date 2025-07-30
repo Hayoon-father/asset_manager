@@ -13,7 +13,6 @@ class PykrxAutoRecoveryExample extends StatefulWidget {
 
 class _PykrxAutoRecoveryExampleState extends State<PykrxAutoRecoveryExample> {
   late EnhancedForeignInvestorProvider _provider;
-  final GlobalKey<_PykrxServerStatusWidgetState> _statusWidgetKey = GlobalKey();
 
   @override
   void initState() {
@@ -21,11 +20,10 @@ class _PykrxAutoRecoveryExampleState extends State<PykrxAutoRecoveryExample> {
     
     // 향상된 Provider 초기화
     _provider = EnhancedForeignInvestorProvider();
-    _provider.initState();
     
     // 초기 데이터 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _provider.loadInitialData();
+      _provider.loadLatestData();
     });
   }
 
@@ -50,7 +48,7 @@ class _PykrxAutoRecoveryExampleState extends State<PykrxAutoRecoveryExample> {
               children: [
                 // pykrx 서버 상태 위젯
                 PykrxServerStatusWidget(
-                  key: _statusWidgetKey,
+                  // key: _statusWidgetKey,
                   isHealthy: provider.isPykrxServerHealthy,
                   isRecovering: provider.isPykrxServerRecovering,
                   currentMessage: provider.pykrxServerMessage,
@@ -66,7 +64,7 @@ class _PykrxAutoRecoveryExampleState extends State<PykrxAutoRecoveryExample> {
                     }
                   },
                   onStatusUpdate: (message, isError) {
-                    _statusWidgetKey.currentState?.updateStatusMessage(message);
+                    // _statusWidgetKey.currentState?.updateStatusMessage(message);
                     
                     if (isError && mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -78,7 +76,7 @@ class _PykrxAutoRecoveryExampleState extends State<PykrxAutoRecoveryExample> {
                     }
                   },
                   onRecoveryProgress: (message) {
-                    _statusWidgetKey.currentState?.updateRecoveryMessage(message);
+                    // _statusWidgetKey.currentState?.updateRecoveryMessage(message);
                   },
                 ),
                 
@@ -350,7 +348,7 @@ class _PykrxAutoRecoveryExampleState extends State<PykrxAutoRecoveryExample> {
         
         ...provider.latestData.take(10).map((data) => Card(
           child: ListTile(
-            title: Text(data.stockName),
+            title: Text(data.stockName ?? '전체 시장'),
             subtitle: Text('${data.marketType} - ${data.investorType}'),
             trailing: Text(
               '${data.netAmount > 0 ? '+' : ''}${data.netAmount}',

@@ -227,11 +227,25 @@ class _HomeScreenState extends State<HomeScreen>
             const SizedBox(height: 16),
           ],
           
-          // 외국인 매매 현황 그래프 (최근 1개월)
+          // 1. 누적 순매수 차트 (기존)
           AdvancedDailyTrendChart(
             summaryData: provider.getForeignHoldingsTrendData(),
             selectedMarket: provider.selectedMarket,
             onRequestMoreData: () => provider.loadMoreHistoricalData(),
+            title: '외국인 누적 순매수 현황',
+            chartDataType: ChartDataType.cumulative,
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // 2. 실제 보유액 차트 (새로 추가)
+          AdvancedDailyTrendChart(
+            summaryData: provider.getForeignHoldingsTrendData(),
+            selectedMarket: provider.selectedMarket,
+            onRequestMoreData: () => provider.loadMoreHistoricalData(),
+            title: '외국인 실제 보유액 현황',
+            chartDataType: ChartDataType.actual,
+            autoLoadActualData: true, // 자동으로 실제 보유액 데이터 로드
           ),
           
           const SizedBox(height: 16),

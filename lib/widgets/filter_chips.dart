@@ -11,59 +11,6 @@ class FilterChips extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
-          // 시장 필터
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                const Text(
-                  '시장: ',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Consumer<ForeignInvestorProvider>(
-                  builder: (context, provider, _) {
-                    return Wrap(
-                    spacing: 8,
-                    children: [
-                      _buildChoiceChip(
-                        context,
-                        label: '전체',
-                        value: 'ALL',
-                        selected: provider.selectedMarket == 'ALL',
-                        onSelected: provider.isLoading ? null : (selected) {
-                          if (selected) provider.setMarketFilter('ALL');
-                        },
-                      ),
-                      _buildChoiceChip(
-                        context,
-                        label: 'KOSPI',
-                        value: 'KOSPI',
-                        selected: provider.selectedMarket == 'KOSPI',
-                        onSelected: provider.isLoading ? null : (selected) {
-                          if (selected) provider.setMarketFilter('KOSPI');
-                        },
-                      ),
-                      _buildChoiceChip(
-                        context,
-                        label: 'KOSDAQ',
-                        value: 'KOSDAQ',
-                        selected: provider.selectedMarket == 'KOSDAQ',
-                        onSelected: provider.isLoading ? null : (selected) {
-                          if (selected) provider.setMarketFilter('KOSDAQ');
-                        },
-                      ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
           // 기간 필터
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,

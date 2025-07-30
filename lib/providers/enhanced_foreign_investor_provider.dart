@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../providers/foreign_investor_provider.dart';
 import '../services/enhanced_foreign_investor_service.dart';
 
@@ -17,9 +16,7 @@ class EnhancedForeignInvestorProvider extends ForeignInvestorProvider {
   int _recoveryAttempts = 0;
   static const int _maxRecoveryAttempts = 3;
   
-  @override
-  void initState() {
-    super.initState();
+  EnhancedForeignInvestorProvider() {
     _setupEnhancedService();
   }
   
@@ -120,8 +117,6 @@ class EnhancedForeignInvestorProvider extends ForeignInvestorProvider {
   /// 향상된 데이터 로드 (자동 복구 포함)
   @override
   Future<void> loadLatestData() async {
-    setLoading(true);
-    
     try {
       // 향상된 서비스로 데이터 로드 시도
       final data = await _enhancedService.getLatestForeignInvestorDataWithRetry(
@@ -140,8 +135,6 @@ class EnhancedForeignInvestorProvider extends ForeignInvestorProvider {
       // 오류 시 기존 서비스 폴백
       print('⚠️ 향상된 서비스 실패, 기존 서비스로 폴백: $e');
       await super.loadLatestData();
-    } finally {
-      setLoading(false);
     }
   }
   
