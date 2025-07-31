@@ -1361,19 +1361,18 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     final sortedData = List<DailyForeignSummary>.from(filteredData);
     sortedData.sort((a, b) => a.date.compareTo(b.date));
     
-    // 표시할 라벨의 인덱스들 계산 (차트 포인트와 동일한 간격)
-    final labelIndices = <int>[];
-    if (actualLabelCount > 0) {
-      final step = (sortedData.length - 1) / (actualLabelCount - 1);
-      for (int i = 0; i < actualLabelCount; i++) {
-        final index = (i * step).round().clamp(0, sortedData.length - 1);
-        if (!labelIndices.contains(index)) {
-          labelIndices.add(index);
-        }
-      }
-    }
+    // 🔧 모든 데이터 포인트에 라벨을 표시하되, 겹치지 않도록 간격 조절
+    // 라벨 간격을 동적으로 계산 (화면 크기와 스케일에 따라)
+    final minLabelSpacing = 60.0; // 최소 라벨 간격 (픽셀)
+    final clampedScale = _scale.clamp(0.01, 100.0);
+    final scaledWidth = (screenWidth - 120) * clampedScale;
+    final pointSpacing = sortedData.length > 1 
+        ? (scaledWidth / (sortedData.length - 1)).clamp(0.1, double.infinity)
+        : (scaledWidth / 2).clamp(0.1, double.infinity);
     
-    // 🔧 차트 포인트와 동일한 위치 계산 방식 사용
+    // 현재 스케일에서 표시 가능한 라벨 간격 계산
+    final labelStep = math.max(1, (minLabelSpacing / pointSpacing).ceil());
+    
     return SizedBox(
       width: double.infinity,
       height: 40,
@@ -1382,7 +1381,7 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
           data: sortedData,
           scale: _scale,
           panX: _panX,
-          labelIndices: labelIndices,
+          labelStep: labelStep,
           formatDateForAxis: _formatDateForAxis,
         ),
       ),
@@ -1949,20 +1948,20 @@ class _XAxisLabelPainter extends CustomPainter {
   final List<DailyForeignSummary> data;
   final double scale;
   final double panX;
-  final List<int> labelIndices;
+  final int labelStep;
   final String Function(String) formatDateForAxis;
 
   _XAxisLabelPainter({
     required this.data,
     required this.scale,
     required this.panX,
-    required this.labelIndices,
+    required this.labelStep,
     required this.formatDateForAxis,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (data.isEmpty || labelIndices.isEmpty) return;
+    if (data.isEmpty) return;
 
     // 차트 영역과 동일한 계산 방식
     final chartArea = Rect.fromLTWH(80, 0, size.width - 80, size.height);
@@ -1972,36 +1971,35 @@ class _XAxisLabelPainter extends CustomPainter {
         ? (scaledWidth / (data.length - 1)).clamp(0.1, double.infinity)
         : (scaledWidth / 2).clamp(0.1, double.infinity);
 
-    for (final index in labelIndices) {
-      if (index >= 0 && index < data.length) {
-        // 차트 포인트와 동일한 X 위치 계산
-        final x = chartArea.left + panX + (index * pointSpacing);
+    // 모든 데이터 포인트를 순회하되, labelStep 간격으로만 라벨 표시
+    for (int i = 0; i < data.length; i += labelStep) {
+      // 차트 포인트와 정확히 동일한 X 위치 계산
+      final x = chartArea.left + panX + (i * pointSpacing);
+      
+      // 화면 영역 내에 있는 라벨만 그리기
+      if (x >= chartArea.left - 50 && x <= chartArea.right + 50) {
+        final dateText = formatDateForAxis(data[i].date);
         
-        // 화면 영역 내에 있는 라벨만 그리기
-        if (x >= chartArea.left - 30 && x <= chartArea.right + 30) {
-          final dateText = formatDateForAxis(data[index].date);
-          
-          final textPainter = TextPainter(
-            text: TextSpan(
-              text: dateText,
-              style: TextStyle(
-                fontSize: 9,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-              ),
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: dateText,
+            style: TextStyle(
+              fontSize: 9,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
             ),
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.center,
-          );
-          
-          textPainter.layout();
-          
-          // 텍스트를 중앙 정렬하여 그리기
-          final textX = x - textPainter.width / 2;
-          final textY = size.height / 2 - textPainter.height / 2;
-          
-          textPainter.paint(canvas, Offset(textX, textY));
-        }
+          ),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+        );
+        
+        textPainter.layout();
+        
+        // 텍스트를 중앙 정렬하여 그리기
+        final textX = x - textPainter.width / 2;
+        final textY = size.height / 2 - textPainter.height / 2;
+        
+        textPainter.paint(canvas, Offset(textX, textY));
       }
     }
   }
