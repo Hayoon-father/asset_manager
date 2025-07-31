@@ -540,8 +540,9 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildViewButton(ChartViewType.combined, '통합', Icons.show_chart),
-          _buildViewButton(ChartViewType.separated, '분리', Icons.stacked_line_chart),
+          _buildViewButton(ChartViewType.combined, '전체', Icons.show_chart),
+          _buildViewButton(ChartViewType.kospi, 'KOSPI', Icons.trending_up),
+          _buildViewButton(ChartViewType.kosdaq, 'KOSDAQ', Icons.stacked_line_chart),
         ],
       ),
     );
@@ -693,17 +694,11 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
         Row(
           children: [
             if (_viewType == ChartViewType.combined) ...[
-              _buildLegendItem(Colors.red, '상승 구간', true, (value) {}),
-              const SizedBox(width: 20),
-              _buildLegendItem(Colors.blue, '하강 구간', true, (value) {}),
-            ] else ...[
-              _buildLegendItem(Colors.blue.shade600, 'KOSPI', _showKospiData, (value) {
-                setState(() => _showKospiData = value);
-              }),
-              const SizedBox(width: 20),
-              _buildLegendItem(Colors.orange.shade600, 'KOSDAQ', _showKosdaqData, (value) {
-                setState(() => _showKosdaqData = value);
-              }),
+              _buildLegendItem(Colors.green, '전체 (KOSPI + KOSDAQ)', true, (value) {}),
+            ] else if (_viewType == ChartViewType.kospi) ...[
+              _buildLegendItem(Colors.blue, 'KOSPI', true, (value) {}),
+            ] else if (_viewType == ChartViewType.kosdaq) ...[
+              _buildLegendItem(Colors.red, 'KOSDAQ', true, (value) {}),
             ],
           ],
         ),
@@ -918,8 +913,18 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     // 차트 영역 내의 탭인지 확인
     if (position.dx < 80 || position.dy > 310) return;
     
-    // 🔧 그래프와 동일한 방식으로 데이터 정렬
-    final sortedData = List<DailyForeignSummary>.from(widget.summaryData);
+    // 🔧 뷰 타입에 따라 적절한 데이터 필터링
+    List<DailyForeignSummary> filteredData;
+    if (_viewType == ChartViewType.combined) {
+      // 전체 뷰에서는 'ALL' 타입만 사용
+      filteredData = widget.summaryData.where((d) => d.marketType == 'ALL').toList();
+    } else if (_viewType == ChartViewType.kospi) {
+      filteredData = widget.summaryData.where((d) => d.marketType == 'KOSPI').toList();
+    } else {
+      filteredData = widget.summaryData.where((d) => d.marketType == 'KOSDAQ').toList();
+    }
+    
+    final sortedData = List<DailyForeignSummary>.from(filteredData);
     sortedData.sort((a, b) => a.date.compareTo(b.date));
     
     // 가장 가까운 데이터 포인트 찾기
@@ -1158,15 +1163,26 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
   }
 
   Widget _buildYAxisLabels() {
+    // 🔧 뷰 타입에 따라 적절한 데이터 필터링
+    List<DailyForeignSummary> filteredData;
+    if (_viewType == ChartViewType.combined) {
+      // 전체 뷰에서는 'ALL' 타입만 사용
+      filteredData = widget.summaryData.where((d) => d.marketType == 'ALL').toList();
+    } else if (_viewType == ChartViewType.kospi) {
+      filteredData = widget.summaryData.where((d) => d.marketType == 'KOSPI').toList();
+    } else {
+      filteredData = widget.summaryData.where((d) => d.marketType == 'KOSDAQ').toList();
+    }
+    
     final values = _dataType == ChartDataType.actual
-        ? widget.summaryData.map((d) => d.actualHoldingsValue).toList()
-        : widget.summaryData.map((d) => d.cumulativeHoldings).toList();
+        ? filteredData.map((d) => d.actualHoldingsValue).toList()
+        : filteredData.map((d) => d.cumulativeHoldings).toList();
         
     // 디버깅: Y축 라벨에서 읽는 실제 값들 확인
     if (_dataType == ChartDataType.actual) {
-      print('📊 Y축에서 읽는 actualHoldingsValue 값들:');
+      print('📊 Y축에서 읽는 actualHoldingsValue 값들 (필터링됨):');
       for (int i = 0; i < math.min(values.length, 5); i++) {
-        final data = widget.summaryData[i];
+        final data = filteredData[i];
         print('  - [${data.date}] ${data.marketType}: ${data.actualHoldingsValue} (${(data.actualHoldingsValue / 1000000000000).toStringAsFixed(1)}조원)');
       }
       
@@ -1501,7 +1517,7 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
   }
 }
 
-enum ChartViewType { combined, separated }
+enum ChartViewType { combined, kospi, kosdaq }
 enum ChartDataType { cumulative, actual } // 누적 순매수 vs 실제 보유액
 
 class _AdvancedChartPainter extends CustomPainter {
@@ -1547,11 +1563,16 @@ class _AdvancedChartPainter extends CustomPainter {
 
     _drawGrid(canvas, chartArea);
     
-    if (viewType == ChartViewType.combined && showCombined) {
-      _drawCombinedChart(canvas, chartArea);
-    } else {
-      if (showKospi) _drawKospiChart(canvas, chartArea);
-      if (showKosdaq) _drawKosdaqChart(canvas, chartArea);
+    switch (viewType) {
+      case ChartViewType.combined:
+        _drawCombinedChart(canvas, chartArea);
+        break;
+      case ChartViewType.kospi:
+        _drawKospiChart(canvas, chartArea);
+        break;
+      case ChartViewType.kosdaq:
+        _drawKosdaqChart(canvas, chartArea);
+        break;
     }
 
     canvas.restore();
@@ -1630,15 +1651,18 @@ class _AdvancedChartPainter extends CustomPainter {
   }
 
   void _drawCombinedChart(Canvas canvas, Rect chartArea) {
+    // "전체" 뷰에서는 'ALL' 타입 데이터만 사용 (중복 제거)
+    final allTypeData = data.where((d) => d.marketType == 'ALL').toList();
+    
     final values = dataType == ChartDataType.actual
-        ? data.map((d) => d.actualHoldingsValue).toList()
-        : data.map((d) => d.cumulativeHoldings).toList();
+        ? allTypeData.map((d) => d.actualHoldingsValue).toList()
+        : allTypeData.map((d) => d.cumulativeHoldings).toList();
     
     // 디버깅: 차트 그리기에서 실제 값들 확인
     if (dataType == ChartDataType.actual) {
-      print('🎨 차트 그리기에서 읽는 actualHoldingsValue 값들:');
+      print('🎨 차트 그리기에서 읽는 actualHoldingsValue 값들 (ALL 타입만):');
       for (int i = 0; i < math.min(values.length, 5); i++) {
-        final data_item = data[i];
+        final data_item = allTypeData[i];
         print('  - [${data_item.date}] ${data_item.marketType}: ${data_item.actualHoldingsValue} (${(data_item.actualHoldingsValue / 1000000000000).toStringAsFixed(1)}조원)');
       }
       
@@ -1696,7 +1720,7 @@ class _AdvancedChartPainter extends CustomPainter {
       print('   - 라벨[$i]: ${(labelValue / 1000000000000).toStringAsFixed(1)}조 at y=${labelPosition.toStringAsFixed(1)}');
     }
 
-    final sortedData = List<DailyForeignSummary>.from(data);
+    final sortedData = List<DailyForeignSummary>.from(allTypeData);
     sortedData.sort((a, b) => a.date.compareTo(b.date));
 
     final points = <Offset>[];
@@ -1728,28 +1752,58 @@ class _AdvancedChartPainter extends CustomPainter {
       points.add(Offset(x, clampedY));
     }
 
-    _drawAnimatedLine(canvas, points, Colors.blue.shade600, 3.0);
-    _drawAnimatedArea(canvas, points, chartArea, Colors.grey.withOpacity(0.1)); // 중성적인 배경색
-    _drawAnimatedPoints(canvas, points, sortedData, Colors.blue.shade600);
+    _drawAnimatedLine(canvas, points, Colors.green, 3.0);
+    _drawAnimatedArea(canvas, points, chartArea, Colors.green.withOpacity(0.1)); // 전체(KOSPI+KOSDAQ) 배경색
+    _drawAnimatedPoints(canvas, points, sortedData, Colors.green);
   }
 
   void _drawKospiChart(Canvas canvas, Rect chartArea) {
     // KOSPI 데이터만 필터링하여 그리기
-    _drawMarketChart(canvas, chartArea, 'KOSPI', Colors.blue.shade600);
+    _drawMarketChart(canvas, chartArea, 'KOSPI', Colors.blue);
   }
 
   void _drawKosdaqChart(Canvas canvas, Rect chartArea) {
     // KOSDAQ 데이터만 필터링하여 그리기
-    _drawMarketChart(canvas, chartArea, 'KOSDAQ', Colors.orange.shade600);
+    _drawMarketChart(canvas, chartArea, 'KOSDAQ', Colors.red);
   }
 
   void _drawMarketChart(Canvas canvas, Rect chartArea, String market, Color color) {
     final marketData = data.where((d) => d.marketType == market).toList();
-    if (marketData.isEmpty) return;
+    print('🎨 _drawMarketChart 호출: $market, 데이터 개수: ${marketData.length}');
+    
+    if (marketData.isEmpty) {
+      print('❌ $market 데이터가 없어서 차트를 그릴 수 없음');
+      
+      // 데이터가 없을 때 메시지 표시
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: '$market 데이터를 불러오는 중...',
+          style: TextStyle(
+            color: Colors.grey.shade400,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+      );
+      textPainter.layout();
+      
+      final centerX = chartArea.left + chartArea.width / 2 - textPainter.width / 2;
+      final centerY = chartArea.top + chartArea.height / 2 - textPainter.height / 2;
+      textPainter.paint(canvas, Offset(centerX, centerY));
+      return;
+    }
 
     final values = dataType == ChartDataType.actual
         ? marketData.map((d) => d.actualHoldingsValue).toList()
         : marketData.map((d) => d.cumulativeHoldings).toList();
+    
+    print('🎨 $market 차트 값들:');
+    for (int i = 0; i < marketData.length && i < 3; i++) {
+      print('   - ${marketData[i].date}: ${values[i]} (${dataType == ChartDataType.actual ? '실제보유액' : '누적순매수'})');
+    }
+    
     if (values.isEmpty) return;
     
     final maxValue = values.reduce((a, b) => a > b ? a : b);

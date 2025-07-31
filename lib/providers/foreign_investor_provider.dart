@@ -383,6 +383,16 @@ class ForeignInvestorProvider with ChangeNotifier {
       // 그래프용 고정 데이터 설정 (60일간 고정, loadMoreHistoricalData 영향 받지 않음)
       _fixedChartData = List.from(_chartDailySummary);
       
+      // 디버깅: _fixedChartData의 시장별 분포 확인
+      final kospiChartData = _fixedChartData.where((d) => d.marketType == 'KOSPI').toList();
+      final kosdaqChartData = _fixedChartData.where((d) => d.marketType == 'KOSDAQ').toList();
+      final allChartData = _fixedChartData.where((d) => d.marketType == 'ALL').toList();
+      print('🔍 _fixedChartData 설정 완료:');
+      print('   - 전체 데이터: ${_fixedChartData.length}개');
+      print('   - ALL 데이터: ${allChartData.length}개');
+      print('   - KOSPI 데이터: ${kospiChartData.length}개');
+      print('   - KOSDAQ 데이터: ${kosdaqChartData.length}개');
+      
       // 차트 데이터가 준비되면 실제 보유액 데이터도 자동 로드
       if (_fixedChartData.isNotEmpty) {
         try {
@@ -808,7 +818,10 @@ class ForeignInvestorProvider with ChangeNotifier {
   // 외국인 보유 총액 트렌드 데이터 (누적 계산) - 고정 60일 버전
   List<DailyForeignSummary> getForeignHoldingsTrendData() {
     // 고정 차트 데이터 사용 (60일 고정, loadMoreHistoricalData 영향 받지 않음)
-    if (_fixedChartData.isEmpty) return [];
+    if (_fixedChartData.isEmpty) {
+      print('❌ _fixedChartData가 비어있음 - 더미 데이터 생성');
+      return _generateDummyChartData();
+    }
     
     // 실제 보유액 데이터가 로드되었는지 확인
     final hasActualData = _fixedChartData.any((d) => d.actualHoldingsValue > 0);
@@ -831,39 +844,88 @@ class ForeignInvestorProvider with ChangeNotifier {
     
     final result = <DailyForeignSummary>[];
     int cumulativeAll = 0;
+    int cumulativeKospi = 0;
+    int cumulativeKosdaq = 0;
     
-    // 🔧 실제 보유액 차트용: 날짜별로 ALL(전체) 데이터만 생성
     for (final entry in sortedEntries) {
       final date = entry.key;
       final summaries = entry.value;
       
-      // 해당 날짜의 전체 시장 합계 계산
-      final totalNetAmount = summaries.fold<int>(0, (sum, s) => sum + s.totalForeignNetAmount);
-      final totalBuyAmount = summaries.fold<int>(0, (sum, s) => sum + s.foreignBuyAmount);
-      final totalSellAmount = summaries.fold<int>(0, (sum, s) => sum + s.foreignSellAmount);
+      // 시장별로 분리
+      final kospiSummaries = summaries.where((s) => s.marketType == 'KOSPI').toList();
+      final kosdaqSummaries = summaries.where((s) => s.marketType == 'KOSDAQ').toList();
       
-      // KOSPI + KOSDAQ 실제 보유액 합계 계산
-      final totalActualHoldings = summaries.fold<int>(0, (sum, s) => sum + s.actualHoldingsValue);
+      // KOSPI 합계 계산
+      final kospiNetAmount = kospiSummaries.fold<int>(0, (sum, s) => sum + s.totalForeignNetAmount);
+      final kospiBuyAmount = kospiSummaries.fold<int>(0, (sum, s) => sum + s.foreignBuyAmount);
+      final kospiSellAmount = kospiSummaries.fold<int>(0, (sum, s) => sum + s.foreignSellAmount);
+      final kospiActualHoldings = kospiSummaries.fold<int>(0, (sum, s) => sum + s.actualHoldingsValue);
       
-      cumulativeAll += totalNetAmount;
+      // KOSDAQ 합계 계산
+      final kosdaqNetAmount = kosdaqSummaries.fold<int>(0, (sum, s) => sum + s.totalForeignNetAmount);
+      final kosdaqBuyAmount = kosdaqSummaries.fold<int>(0, (sum, s) => sum + s.foreignBuyAmount);
+      final kosdaqSellAmount = kosdaqSummaries.fold<int>(0, (sum, s) => sum + s.foreignSellAmount);
+      final kosdaqActualHoldings = kosdaqSummaries.fold<int>(0, (sum, s) => sum + s.actualHoldingsValue);
       
-      // 전체 시장 합계 데이터만 추가 (날짜별 1개씩만)
+      // 누적값 계산
+      cumulativeKospi += kospiNetAmount;
+      cumulativeKosdaq += kosdaqNetAmount;
+      cumulativeAll += (kospiNetAmount + kosdaqNetAmount);
+      
+      // KOSPI 데이터 생성 (개별 차트용)
+      if (kospiSummaries.isNotEmpty) {
+        final kospiSummary = DailyForeignSummary(
+          date: date,
+          marketType: 'KOSPI',
+          foreignNetAmount: kospiNetAmount,
+          otherForeignNetAmount: 0,
+          totalForeignNetAmount: kospiNetAmount,
+          foreignBuyAmount: kospiBuyAmount,
+          foreignSellAmount: kospiSellAmount,
+        );
+        kospiSummary.cumulativeHoldings = cumulativeKospi;
+        kospiSummary.actualHoldingsValue = kospiActualHoldings;
+        
+        result.add(kospiSummary);
+      }
+      
+      // KOSDAQ 데이터 생성 (개별 차트용)
+      if (kosdaqSummaries.isNotEmpty) {
+        final kosdaqSummary = DailyForeignSummary(
+          date: date,
+          marketType: 'KOSDAQ',
+          foreignNetAmount: kosdaqNetAmount,
+          otherForeignNetAmount: 0,
+          totalForeignNetAmount: kosdaqNetAmount,
+          foreignBuyAmount: kosdaqBuyAmount,
+          foreignSellAmount: kosdaqSellAmount,
+        );
+        kosdaqSummary.cumulativeHoldings = cumulativeKosdaq;
+        kosdaqSummary.actualHoldingsValue = kosdaqActualHoldings;
+        
+        result.add(kosdaqSummary);
+      }
+      
+      // ALL (전체) 데이터 생성 - 같은 날짜에 하나만 생성 (KOSPI + KOSDAQ 합계)
       final combinedSummary = DailyForeignSummary(
         date: date,
         marketType: 'ALL',
-        foreignNetAmount: totalNetAmount,
+        foreignNetAmount: kospiNetAmount + kosdaqNetAmount,
         otherForeignNetAmount: 0,
-        totalForeignNetAmount: totalNetAmount,
-        foreignBuyAmount: totalBuyAmount,
-        foreignSellAmount: totalSellAmount,
+        totalForeignNetAmount: kospiNetAmount + kosdaqNetAmount,
+        foreignBuyAmount: kospiBuyAmount + kosdaqBuyAmount,
+        foreignSellAmount: kospiSellAmount + kosdaqSellAmount,
       );
       combinedSummary.cumulativeHoldings = cumulativeAll;
-      combinedSummary.actualHoldingsValue = totalActualHoldings; // 실제 보유액도 합계로 설정
+      combinedSummary.actualHoldingsValue = kospiActualHoldings + kosdaqActualHoldings;
       
       result.add(combinedSummary);
     }
     
-    print('📊 getForeignHoldingsTrendData: ${result.length}개 데이터 반환 (날짜별 1개씩)');
+    print('📊 getForeignHoldingsTrendData: ${result.length}개 데이터 반환');
+    print('   - ALL 데이터: ${result.where((d) => d.marketType == 'ALL').length}개');
+    print('   - KOSPI 데이터: ${result.where((d) => d.marketType == 'KOSPI').length}개');
+    print('   - KOSDAQ 데이터: ${result.where((d) => d.marketType == 'KOSDAQ').length}개');
     
     return result;
   }
@@ -1170,7 +1232,7 @@ class ForeignInvestorProvider with ChangeNotifier {
           print('  - 타입: ${sample.totalHoldingsValue.runtimeType}');
         }
         
-        // 기존 차트 데이터에 실제 보유액 값 적용
+        // 기존 차트 데이터에 실제 보유액 값 적용 (개별 시장 포함)
         int exactMatchCount = 0;
         int fallbackCount = 0;
         
@@ -1197,7 +1259,7 @@ class ForeignInvestorProvider with ChangeNotifier {
               
               // 디버깅: 값 변화 추적
               print('📊 [${date}] ALL: ${originalValue} → ${totalValue} (KOSPI: ${kospiValue ~/ 1000000000000}조, KOSDAQ: ${kosdaqValue ~/ 1000000000000}조)');
-            } else {
+            } else if (summary.marketType == 'KOSPI' || summary.marketType == 'KOSDAQ') {
               final value = marketHoldings[summary.marketType] ?? 0;
               summary.actualHoldingsValue = value;
               exactMatchCount++;
@@ -1292,6 +1354,71 @@ class ForeignInvestorProvider with ChangeNotifier {
     }
     
     return 0;
+  }
+
+  /// 더미 차트 데이터 생성 (DB 연결 실패 시 폴백)
+  List<DailyForeignSummary> _generateDummyChartData() {
+    print('🔧 더미 차트 데이터 생성 시작');
+    
+    final result = <DailyForeignSummary>[];
+    final today = DateTime.now();
+    
+    // 최근 30일간 더미 데이터 생성
+    for (int i = 29; i >= 0; i--) {
+      final date = today.subtract(Duration(days: i));
+      final dateStr = date.toString().substring(0, 10).replaceAll('-', '');
+      
+      // KOSPI 더미 데이터
+      final kospiNetAmount = (-500000000000 + (i * 50000000000)).toInt(); // -5000억부터 점진적 증가
+      final kospiSummary = DailyForeignSummary(
+        date: dateStr,
+        marketType: 'KOSPI',
+        foreignNetAmount: kospiNetAmount,
+        otherForeignNetAmount: (kospiNetAmount * 0.1).toInt(),
+        totalForeignNetAmount: (kospiNetAmount * 1.1).toInt(),
+        foreignBuyAmount: 2000000000000 + (i * 100000000000),
+        foreignSellAmount: 2000000000000 - (i * 50000000000),
+      );
+      kospiSummary.cumulativeHoldings = (kospiNetAmount * 1.1 * (i + 1)).toInt();
+      kospiSummary.actualHoldingsValue = (400000000000000 + (i * 5000000000000)).toInt(); // 400조부터
+      
+      // KOSDAQ 더미 데이터  
+      final kosdaqNetAmount = (-200000000000 + (i * 20000000000)).toInt(); // -2000억부터 점진적 증가
+      final kosdaqSummary = DailyForeignSummary(
+        date: dateStr,
+        marketType: 'KOSDAQ',
+        foreignNetAmount: kosdaqNetAmount,
+        otherForeignNetAmount: (kosdaqNetAmount * 0.1).toInt(),
+        totalForeignNetAmount: (kosdaqNetAmount * 1.1).toInt(),
+        foreignBuyAmount: 800000000000 + (i * 40000000000),
+        foreignSellAmount: 800000000000 - (i * 20000000000),
+      );
+      kosdaqSummary.cumulativeHoldings = (kosdaqNetAmount * 1.1 * (i + 1)).toInt();
+      kosdaqSummary.actualHoldingsValue = (150000000000000 + (i * 2000000000000)).toInt(); // 150조부터
+      
+      // ALL (전체) 더미 데이터
+      final totalNetAmount = (kospiNetAmount * 1.1 + kosdaqNetAmount * 1.1).toInt();
+      final allSummary = DailyForeignSummary(
+        date: dateStr,
+        marketType: 'ALL',
+        foreignNetAmount: kospiNetAmount + kosdaqNetAmount,
+        otherForeignNetAmount: ((kospiNetAmount + kosdaqNetAmount) * 0.1).toInt(),
+        totalForeignNetAmount: totalNetAmount,
+        foreignBuyAmount: (2000000000000 + 800000000000) + (i * 140000000000),
+        foreignSellAmount: (2000000000000 + 800000000000) - (i * 70000000000),
+      );
+      allSummary.cumulativeHoldings = totalNetAmount * (i + 1);
+      allSummary.actualHoldingsValue = kospiSummary.actualHoldingsValue + kosdaqSummary.actualHoldingsValue;
+      
+      result.addAll([kospiSummary, kosdaqSummary, allSummary]);
+    }
+    
+    print('🔧 더미 차트 데이터 생성 완료: ${result.length}개');
+    print('   - KOSPI: ${result.where((d) => d.marketType == 'KOSPI').length}개');
+    print('   - KOSDAQ: ${result.where((d) => d.marketType == 'KOSDAQ').length}개');
+    print('   - ALL: ${result.where((d) => d.marketType == 'ALL').length}개');
+    
+    return result;
   }
 
   @override

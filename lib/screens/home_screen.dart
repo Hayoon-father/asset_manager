@@ -6,7 +6,6 @@ import '../widgets/market_summary_card.dart';
 import '../widgets/top_stocks_list.dart';
 import '../widgets/advanced_daily_trend_chart.dart';
 import '../widgets/daily_detail_list.dart';
-import '../widgets/filter_chips.dart';
 import '../widgets/sync_status_widget.dart';
 import '../services/foreign_investor_service.dart';
 
@@ -107,8 +106,6 @@ class _HomeScreenState extends State<HomeScreen>
             children: [
               Column(
                 children: [
-                  // 필터 칩들
-                  const FilterChips(),
                   
                   // 데이터 동기화 상태 표시
                   if (provider.isDataSyncing || provider.syncMessage != null)
@@ -494,9 +491,115 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
+            const SizedBox(width: 16),
+            // 기간 필터 (기존 filter_chips.dart에서 이동)
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    const Text(
+                      '기간: ',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Consumer<ForeignInvestorProvider>(
+                      builder: (context, provider, _) {
+                        return Wrap(
+                          spacing: 8,
+                          children: [
+                            _buildChoiceChip(
+                              context,
+                              label: '1일',
+                              value: '1D',
+                              selected: provider.selectedDateRange == '1D',
+                              onSelected: provider.isLoading ? null : (selected) {
+                                if (selected) provider.setDateRange('1D');
+                              },
+                            ),
+                            _buildChoiceChip(
+                              context,
+                              label: '1주일',
+                              value: '7D',
+                              selected: provider.selectedDateRange == '7D',
+                              onSelected: provider.isLoading ? null : (selected) {
+                                if (selected) provider.setDateRange('7D');
+                              },
+                            ),
+                            _buildChoiceChip(
+                              context,
+                              label: '1개월',
+                              value: '30D',
+                              selected: provider.selectedDateRange == '30D',
+                              onSelected: provider.isLoading ? null : (selected) {
+                                if (selected) provider.setDateRange('30D');
+                              },
+                            ),
+                            _buildChoiceChip(
+                              context,
+                              label: '3개월',
+                              value: '3M',
+                              selected: provider.selectedDateRange == '3M',
+                              onSelected: provider.isLoading ? null : (selected) {
+                                if (selected) provider.setDateRange('3M');
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildChoiceChip(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required bool selected,
+    required ValueChanged<bool>? onSelected,
+  }) {
+    final isDisabled = onSelected == null;
+    
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          color: isDisabled 
+              ? Colors.grey.shade400
+              : selected 
+                  ? Theme.of(context).colorScheme.onPrimary
+                  : Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+      selected: selected,
+      onSelected: onSelected,
+      selectedColor: isDisabled 
+          ? Colors.grey.shade300 
+          : Theme.of(context).colorScheme.primary,
+      backgroundColor: isDisabled 
+          ? Colors.grey.shade100 
+          : Theme.of(context).colorScheme.surface,
+      side: BorderSide(
+        color: isDisabled 
+            ? Colors.grey.shade300
+            : selected
+            ? Theme.of(context).colorScheme.primary
+            : Theme.of(context).colorScheme.outline,
+        width: 1,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 
