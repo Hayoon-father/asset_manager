@@ -1334,6 +1334,19 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
   Widget _buildXAxisLabels() {
     if (widget.summaryData.isEmpty) return const SizedBox();
     
+    // 🔧 뷰 타입에 따라 적절한 데이터 필터링 (차트 포인트와 동일하게)
+    List<DailyForeignSummary> filteredData;
+    if (_viewType == ChartViewType.combined) {
+      // 전체 뷰에서는 'ALL' 타입만 사용
+      filteredData = widget.summaryData.where((d) => d.marketType == 'ALL').toList();
+    } else if (_viewType == ChartViewType.kospi) {
+      filteredData = widget.summaryData.where((d) => d.marketType == 'KOSPI').toList();
+    } else {
+      filteredData = widget.summaryData.where((d) => d.marketType == 'KOSDAQ').toList();
+    }
+    
+    if (filteredData.isEmpty) return const SizedBox();
+    
     // 스케일과 화면 크기에 따른 적응적 라벨 개수 계산
     final screenWidth = MediaQuery.of(context).size.width;
     final availableWidth = screenWidth - 120; // 여백 고려
@@ -1341,16 +1354,14 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     
     // 라벨간 최소 간격을 60픽셀로 설정
     final maxLabels = (availableWidth / 60).floor().clamp(3, 8);
-    final visibleDataCount = (widget.summaryData.length / clampedScale).round().clamp(3, widget.summaryData.length);
+    final visibleDataCount = (filteredData.length / clampedScale).round().clamp(3, filteredData.length);
     final actualLabelCount = math.min(maxLabels, visibleDataCount);
     
     // 데이터를 시간순으로 정렬 (과거 -> 최신)
-    final sortedData = List<DailyForeignSummary>.from(widget.summaryData);
+    final sortedData = List<DailyForeignSummary>.from(filteredData);
     sortedData.sort((a, b) => a.date.compareTo(b.date));
     
-    // 현재 표시되는 데이터 범위 계산 (팬 위치 고려)
-    
-    // 표시할 라벨의 인덱스들 계산
+    // 표시할 라벨의 인덱스들 계산 (차트 포인트와 동일한 간격)
     final labelIndices = <int>[];
     if (actualLabelCount > 0) {
       final step = (sortedData.length - 1) / (actualLabelCount - 1);
@@ -1362,28 +1373,18 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
       }
     }
     
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: labelIndices.map((index) {
-          final data = sortedData[index];
-          final displayDate = _formatDateForAxis(data.date);
-          
-          return Expanded(
-            child: Text(
-              displayDate,
-              style: TextStyle(
-                fontSize: 9,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-              ),
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-            ),
-          );
-        }).toList(),
+    // 🔧 차트 포인트와 동일한 위치 계산 방식 사용
+    return SizedBox(
+      width: double.infinity,
+      height: 40,
+      child: CustomPaint(
+        painter: _XAxisLabelPainter(
+          data: sortedData,
+          scale: _scale,
+          panX: _panX,
+          labelIndices: labelIndices,
+          formatDateForAxis: _formatDateForAxis,
+        ),
       ),
     );
   }
@@ -1935,6 +1936,72 @@ class _AdvancedChartPainter extends CustomPainter {
           ..color = pointColor.withOpacity(0.8)
           ..style = PaintingStyle.fill;
         canvas.drawCircle(point, 2.0, innerPaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// X축 라벨을 정확한 위치에 그리는 CustomPainter
+class _XAxisLabelPainter extends CustomPainter {
+  final List<DailyForeignSummary> data;
+  final double scale;
+  final double panX;
+  final List<int> labelIndices;
+  final String Function(String) formatDateForAxis;
+
+  _XAxisLabelPainter({
+    required this.data,
+    required this.scale,
+    required this.panX,
+    required this.labelIndices,
+    required this.formatDateForAxis,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty || labelIndices.isEmpty) return;
+
+    // 차트 영역과 동일한 계산 방식
+    final chartArea = Rect.fromLTWH(80, 0, size.width - 80, size.height);
+    final clampedScale = scale.clamp(0.01, 100.0);
+    final scaledWidth = chartArea.width * clampedScale;
+    final pointSpacing = data.length > 1 
+        ? (scaledWidth / (data.length - 1)).clamp(0.1, double.infinity)
+        : (scaledWidth / 2).clamp(0.1, double.infinity);
+
+    for (final index in labelIndices) {
+      if (index >= 0 && index < data.length) {
+        // 차트 포인트와 동일한 X 위치 계산
+        final x = chartArea.left + panX + (index * pointSpacing);
+        
+        // 화면 영역 내에 있는 라벨만 그리기
+        if (x >= chartArea.left - 30 && x <= chartArea.right + 30) {
+          final dateText = formatDateForAxis(data[index].date);
+          
+          final textPainter = TextPainter(
+            text: TextSpan(
+              text: dateText,
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.center,
+          );
+          
+          textPainter.layout();
+          
+          // 텍스트를 중앙 정렬하여 그리기
+          final textX = x - textPainter.width / 2;
+          final textY = size.height / 2 - textPainter.height / 2;
+          
+          textPainter.paint(canvas, Offset(textX, textY));
+        }
       }
     }
   }
