@@ -1352,11 +1352,6 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     final availableWidth = screenWidth - 120; // 여백 고려
     final clampedScale = _scale.clamp(0.01, 100.0);
     
-    // 라벨간 최소 간격을 60픽셀로 설정
-    final maxLabels = (availableWidth / 60).floor().clamp(3, 8);
-    final visibleDataCount = (filteredData.length / clampedScale).round().clamp(3, filteredData.length);
-    final actualLabelCount = math.min(maxLabels, visibleDataCount);
-    
     // 데이터를 시간순으로 정렬 (과거 -> 최신)
     final sortedData = List<DailyForeignSummary>.from(filteredData);
     sortedData.sort((a, b) => a.date.compareTo(b.date));
@@ -1364,7 +1359,6 @@ class _AdvancedDailyTrendChartState extends State<AdvancedDailyTrendChart>
     // 🔧 모든 데이터 포인트에 라벨을 표시하되, 겹치지 않도록 간격 조절
     // 라벨 간격을 동적으로 계산 (화면 크기와 스케일에 따라)
     final minLabelSpacing = 60.0; // 최소 라벨 간격 (픽셀)
-    final clampedScale = _scale.clamp(0.01, 100.0);
     final scaledWidth = (screenWidth - 120) * clampedScale;
     final pointSpacing = sortedData.length > 1 
         ? (scaledWidth / (sortedData.length - 1)).clamp(0.1, double.infinity)
